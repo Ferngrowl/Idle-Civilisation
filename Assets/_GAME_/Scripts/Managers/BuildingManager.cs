@@ -1,12 +1,14 @@
 using System;
 using System.Collections.Generic;
 using UnityEngine;
+using System.Linq;
 
 /// <summary>
 /// Manages all buildings in the game. Handles construction, upgrades, and production.
 /// </summary>
 public class BuildingManager : MonoBehaviour
 {
+
     [SerializeField] private List<BuildingDefinition> buildingDefinitions = new List<BuildingDefinition>();
     
     // Runtime building data
@@ -24,15 +26,25 @@ public class BuildingManager : MonoBehaviour
         SetupBuildingVisibility();
     }
     
+    public BuildingDefinition GetBuildingDefinition(string buildingID) {
+    // Example: Retrieve from a predefined list or dictionary
+    return buildingDefinitions.Find(def => def.ID == buildingID);
+    }
+    
     /// <summary>
     /// Setup advanced visibility conditions for buildings
     /// </summary>
     private void SetupBuildingVisibility()
     {
-        // Example: Lumber Mill becomes visible after you have at least 1 hut
-        if (buildings.ContainsKey("lumberMill") && buildings.ContainsKey("hut"))
+        foreach (var building in buildings.Values)
         {
-            buildings["lumberMill"].VisibilityCondition = () => GetBuildingCount("hut") >= 1;
+            if (building.Definition.VisibilityRequirements.Count > 0)
+            {
+                building.VisibilityCondition = () => 
+                    building.Definition.VisibilityRequirements.All(req =>
+                        GetBuildingCount(req.RequiredBuildingID) >= req.RequiredCount
+                    );
+            }
         }
     }
     
@@ -239,6 +251,12 @@ public class BuildingManager : MonoBehaviour
     }
 }
 
+[Serializable]
+public class BuildingVisibilityRequirement {
+    public string RequiredBuildingID;
+    public int RequiredCount = 1;
+}
+
 /// <summary>
 /// Definition for a building type - used for editor configuration
 /// </summary>
@@ -262,9 +280,12 @@ public class BuildingDefinition
     
     // Resource storage capacity this building provides
     public List<ResourceAmount> Capacity = new List<ResourceAmount>();
+
+    public List<BuildingVisibilityRequirement> VisibilityRequirements = new List<BuildingVisibilityRequirement>();
     
     public bool VisibleByDefault = false;
 }
+
 
 /// <summary>
 /// Runtime instance of a building

@@ -209,14 +209,16 @@ public class UIManager : MonoBehaviour
         {
             GameObject buildingUIObj = Instantiate(buildingPrefab, buildingContainer);
             BuildingUI buildingUI = buildingUIObj.GetComponent<BuildingUI>();
+            buildingUIObj.name = building.Definition.ID; 
             if (buildingUI != null)
             {
                 buildingUI.BuildingID = building.Definition.ID;
                 buildingUI.NameText.text = building.Definition.DisplayName;
                 buildingUI.DescriptionText.text = building.Definition.Description;
                 buildingUI.CountText.text = $"Owned: {building.Count}";
-                buildingUI.CostText.text = GetBuildingCostString(building.Definition.Cost); //show
-                buildingUI.SetButtonCost(building.Definition.Cost);
+                Dictionary<string, float> currentCost = GameManager.Instance.Buildings.CalculateBuildingCost(building.Definition.ID);
+                buildingUI.CostText.text = GetBuildingCostString(currentCost);
+                buildingUI.SetButtonCost(currentCost);
                 buildingUI.Icon.sprite = building.Definition.Icon;
                 
                 // Set the button's onClick to purchase this building
@@ -225,9 +227,9 @@ public class UIManager : MonoBehaviour
                 {
                     buyButton.onClick.AddListener(() =>
                     {
-                        if (GameManager.Instance.Buildings.CanAffordBuilding(building.Definition.ID))
+                        if (GameManager.Instance.Buildings.CanConstructBuilding(building.Definition.ID))
                         {
-                            GameManager.Instance.Buildings.PurchaseBuilding(building.Definition.ID);
+                            GameManager.Instance.Buildings.ConstructBuilding(building.Definition.ID);
                             UpdateBuildingCount(building.Definition.ID); //update count
                             UpdateResourceValues(); //update resources
                             UpdateBuildingButtons();
@@ -295,7 +297,7 @@ public class UIManager : MonoBehaviour
                 Button buyButton = buildingUI.GetComponentInChildren<Button>();
                 if (buyButton != null)
                 {
-                    buyButton.interactable = buildingManager.CanAffordBuilding(buildingID);
+                    buyButton.interactable = buildingManager.CanConstructBuilding(buildingID);                
                 }
             }
         }
@@ -309,7 +311,7 @@ public class UIManager : MonoBehaviour
         string costText = "Cost:";
         foreach (var costItem in cost)
         {
-            ResourceDefinition resource = GameManager.Instance.Resources.GetResourceDefinition(costItem.Key);
+            ResourceDefinition resource = GameManager.Instance.Resources.GetVisibleResources().Find(r => r.Definition.ID == costItem.Key)?.Definition;
             string resourceName = resource != null ? resource.DisplayName : costItem.Key;
             costText += $"\n{resourceName}: {costItem.Value}";
         }
@@ -416,7 +418,7 @@ public class UIManager : MonoBehaviour
         string costText = "Cost:";
         foreach (var costItem in cost)
         {
-            ResourceDefinition resource = GameManager.Instance.Resources.GetResourceDefinition(costItem.Key);
+            ResourceDefinition resource = GameManager.Instance.Resources.GetVisibleResources().Find(r => r.Definition.ID == costItem.Key)?.Definition;
             string resourceName = resource != null ? resource.DisplayName : costItem.Key;
             costText += $"\n{resourceName}: {costItem.Value}";
         }
@@ -441,10 +443,11 @@ public class UIManager : MonoBehaviour
                 Building building = GameManager.Instance.Buildings.GetBuilding(targetID);
                 if (building != null)
                 {
+                    var currentCost = GameManager.Instance.Buildings.CalculateBuildingCost(targetID);
                     tooltipTitle.text = building.Definition.DisplayName;
                     tooltipDescription.text = building.Definition.Description;
                     
-                    foreach (var costItem in building.Definition.Cost)
+                    foreach (var costItem in currentCost)
                     {
                         bool canAfford = GameManager.Instance.Resources.GetAmount(costItem.Key) >= costItem.Value;
                         string colorTag = canAfford ? "<color=white>" : "<color=red>";

@@ -12,6 +12,12 @@ public class ResourceManager : MonoBehaviour
     // Runtime resource data
     private Dictionary<string, Resource> resources = new Dictionary<string, Resource>();
     
+    public float GetProductionRate(string resourceID) => CalculateProductionRate(resourceID);
+    public float GetConsumptionRate(string resourceID) => CalculateConsumptionRate(resourceID);
+
+    public ResourceDefinition GetResourceDefinition(string id) 
+    => resourceDefinitions.Find(r => r.ID == id);
+    
     public void Initialize()
     {
         // Initialize all resources from definitions
@@ -91,11 +97,11 @@ public class ResourceManager : MonoBehaviour
         var buildings = GameManager.Instance.Buildings.GetAllBuildings();
         foreach (var building in buildings)
         {
-            foreach (var consumption in building.Definition.Consumption)
+            foreach (var consump in building.Definition.Consumption)
             {
-                if (consumption.ResourceID == resourceID)
+                if (consump.ResourceID == resourceID)
                 {
-                    consumption += consumption.Amount * building.Count;
+                    consumption += consump.Amount * building.Count;
                 }
             }
         }

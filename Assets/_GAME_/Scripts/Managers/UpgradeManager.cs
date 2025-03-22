@@ -1,6 +1,7 @@
 using System;
 using System.Collections.Generic;
 using UnityEngine;
+using System.Linq;
 
 /// <summary>
 /// Manages all upgrades in the game. Handles purchasing, effects, and unlocks.
@@ -24,16 +25,28 @@ public class UpgradeManager : MonoBehaviour
         SetupUpgradeVisibility();
     }
     
+    public UpgradeDefinition GetUpgradeDefinition(string upgradeID) {
+    // Example: Retrieve from a predefined list or dictionary
+    return upgradeDefinitions.Find(def => def.ID == upgradeID);
+    }
+    
     /// <summary>
     /// Setup advanced visibility conditions for upgrades
     /// </summary>
     private void SetupUpgradeVisibility()
     {
-        // Example: Agriculture upgrade becomes visible after you have 5 catnip fields
-        if (upgrades.ContainsKey("agriculture") && GameManager.Instance.Buildings != null)
+        foreach (var upgrade in upgrades.Values)
         {
-            upgrades["agriculture"].VisibilityCondition = () => 
-                GameManager.Instance.Buildings.GetBuildingCount("catnipField") >= 5;
+            if (upgrade.Definition.VisibilityRequirements?.Count > 0)
+            {
+                upgrade.VisibilityCondition = () => 
+                    upgrade.Definition.VisibilityRequirements.All(req =>
+                        (string.IsNullOrEmpty(req.RequiredBuildingID) || 
+                        GameManager.Instance.Buildings.GetBuildingCount(req.RequiredBuildingID) >= req.RequiredCount) &&
+                        (string.IsNullOrEmpty(req.RequiredResourceID) || 
+                        GameManager.Instance.Resources.GetAmount(req.RequiredResourceID) >= req.RequiredAmount)
+                    );
+            }
         }
     }
     
@@ -287,7 +300,9 @@ public enum EffectType
     UnlockResource,
     ProductionMultiplier,
     StorageMultiplier,
-    ConsumptionReduction
+    ConsumptionReduction,
+    BuildingProductionMultiplier,
+    ResourceCapacityMultiplier
 }
 
 /// <summary>
@@ -300,6 +315,8 @@ public class UpgradeDefinition
     public string DisplayName;
     public string Description;
     public Sprite Icon;
+
+    public List<UpgradeVisibilityRequirement> VisibilityRequirements = new List<UpgradeVisibilityRequirement>();
     
     // Cost to purchase the upgrade
     public Dictionary<string, float> Cost = new Dictionary<string, float>();
@@ -364,4 +381,12 @@ public class UpgradeState
     public string id;
     public bool isPurchased;
     public bool isUnlocked;
+}
+
+[Serializable]
+public class UpgradeVisibilityRequirement {
+    public string RequiredBuildingID;
+    public int RequiredCount = 1;
+    public string RequiredResourceID;
+    public float RequiredAmount;
 }
