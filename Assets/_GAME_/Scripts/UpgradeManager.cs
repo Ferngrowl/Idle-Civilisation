@@ -106,6 +106,9 @@ public class UpgradeManager : MonoBehaviour
         
         // Update UI
         GameManager.Instance.UI.RefreshUpgradeView();
+        
+        // Check if this unlocks other upgrades
+        CheckDependentUpgrades(upgradeID);
     }
     
     /// <summary>
@@ -132,6 +135,42 @@ public class UpgradeManager : MonoBehaviour
                 case EffectType.ProductionMultiplier:
                     // Applied in resource production calculation
                     break;
+                    
+                case EffectType.StorageMultiplier:
+                    // Applied in resource capacity calculation
+                    break;
+                    
+                case EffectType.ConsumptionReduction:
+                    // Applied in resource consumption calculation
+                    break;
+            }
+        }
+    }
+    
+    /// <summary>
+    /// Checks if any upgrades should be unlocked because their prerequisite was purchased
+    /// </summary>
+    private void CheckDependentUpgrades(string purchasedUpgradeID)
+    {
+        foreach (var upgrade in upgrades.Values)
+        {
+            if (!upgrade.IsUnlocked && upgrade.Definition.Prerequisites.Contains(purchasedUpgradeID))
+            {
+                // Check if all prerequisites are now met
+                bool allPrerequisitesMet = true;
+                foreach (var prerequisite in upgrade.Definition.Prerequisites)
+                {
+                    if (!IsUpgradePurchased(prerequisite))
+                    {
+                        allPrerequisitesMet = false;
+                        break;
+                    }
+                }
+                
+                if (allPrerequisitesMet)
+                {
+                    UnlockUpgrade(upgrade.Definition.ID);
+                }
             }
         }
     }
@@ -186,6 +225,15 @@ public class UpgradeManager : MonoBehaviour
         return purchasedUpgrades;
     }
     
+    public Upgrade GetUpgrade(string upgradeID)
+    {
+        if (upgrades.ContainsKey(upgradeID))
+        {
+            return upgrades[upgradeID];
+        }
+        return null;
+    }
+    
     public void Reset()
     {
         // Reset all upgrades to initial state
@@ -237,7 +285,9 @@ public enum EffectType
     UnlockBuilding,
     UnlockUpgrade,
     UnlockResource,
-    ProductionMultiplier
+    ProductionMultiplier,
+    StorageMultiplier,
+    ConsumptionReduction
 }
 
 /// <summary>
@@ -292,4 +342,26 @@ public class Upgrade
     {
         Definition = definition;
         IsPurchased = false;
-        IsUnlocked = definition.Visible
+        IsUnlocked = definition.VisibleByDefault;
+    }
+}
+
+/// <summary>
+/// Serializable data for upgrades
+/// </summary>
+[Serializable]
+public class UpgradeData
+{
+    public List<UpgradeState> upgradeStates;
+}
+
+/// <summary>
+/// Serializable state of a single upgrade
+/// </summary>
+[Serializable]
+public class UpgradeState
+{
+    public string id;
+    public bool isPurchased;
+    public bool isUnlocked;
+}
