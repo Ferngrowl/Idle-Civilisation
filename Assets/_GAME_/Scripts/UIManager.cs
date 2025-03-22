@@ -2,6 +2,7 @@ using System.Collections.Generic;
 using UnityEngine;
 using UnityEngine.UI;
 using TMPro;
+using System;
 
 /// <summary>
 /// Manages all UI elements and interactions in the game. Handles resources display, building lists,
@@ -111,7 +112,6 @@ public class UIManager : MonoBehaviour
     {
         Color activeColor = new Color(1f, 1f, 1f, 1f);
         Color inactiveColor = new Color(0.7f, 0.7f, 0.7f, 1f);
-        
         buildingTabButton.color = (currentTab == UITab.Buildings) ? activeColor : inactiveColor;
         upgradeTabButton.color = (currentTab == UITab.Upgrades) ? activeColor : inactiveColor;
     }
@@ -126,7 +126,6 @@ public class UIManager : MonoBehaviour
     private void UpdateResourceValues()
     {
         ResourceManager resourceManager = GameManager.Instance.Resources;
-        
         foreach (var resourceUI in resourceUIElements.Values)
         {
             string resourceID = resourceUI.ResourceID;
@@ -134,16 +133,11 @@ public class UIManager : MonoBehaviour
             float capacity = resourceManager.GetCapacity(resourceID);
             
             // Update display
-            resourceUI.ValueText.text = capacity > 0 
-                ? $"{Mathf.Floor(amount)}/{Mathf.Floor(capacity)}" 
-                : $"{Mathf.Floor(amount)}";
+            resourceUI.ValueText.text = capacity > 0 ? $"{Mathf.Floor(amount)}/{Mathf.Floor(capacity)}" : $"{Mathf.Floor(amount)}";
             
             // Production rate
             float productionRate = CalculateNetProductionRate(resourceID);
-            string rateText = productionRate >= 0 
-                ? $"+{productionRate:F1}/s" 
-                : $"{productionRate:F1}/s";
-            
+            string rateText = productionRate >= 0 ? $"+{productionRate:F1}/s" : $"{productionRate:F1}/s";
             resourceUI.RateText.text = rateText;
             resourceUI.RateText.color = productionRate >= 0 ? Color.green : Color.red;
         }
@@ -155,131 +149,44 @@ public class UIManager : MonoBehaviour
     private float CalculateNetProductionRate(string resourceID)
     {
         // This is a simplified version for UI display - the real calculation happens in ResourceManager
-        // We're just showing an approximation for the player
-        
-        float productionRate = 0;
-        float consumptionRate = 0;
-        
-        // Get production from buildings
-        var buildings = GameManager.Instance.Buildings.GetAllBuildings();
-        foreach (var building in buildings)
-        {
-            if (building.Count <= 0) continue;
-            
-            // Production
-            foreach (var production in building.Definition.Production)
-            {
-                if (production.ResourceID == resourceID)
-                {
-                    productionRate += production.Amount * building.Count;
-                }
-            }
-            
-            // Consumption
-            foreach (var consumption in building.Definition.Consumption)
-            {
-                if (consumption.ResourceID == resourceID)
-                {
-                    consumptionRate += consumption.Amount * building.Count;
-                }
-            }
-        }
-        
-        // Apply multipliers from upgrades
-        float multiplier = 1f;
-        var upgrades = GameManager.Instance.Upgrades.GetAllPurchasedUpgrades();
-        foreach (var upgrade in upgrades)
-        {
-            foreach (var effect in upgrade.Definition.Effects)
-            {
-                if (effect.Type == EffectType.ProductionMultiplier && effect.TargetID == resourceID)
-                {
-                    multiplier *= effect.Value;
-                }
-                else if (effect.Type == EffectType.ConsumptionReduction && effect.TargetID == resourceID)
-                {
-                    consumptionRate *= (1f - effect.Value); // Reduce consumption
-                }
-            }
-        }
-        
-        return (productionRate * multiplier) - consumptionRate;
+        // We're just showing an approximation for the player.
+        float productionRate = GameManager.Instance.Resources.GetProductionRate(resourceID);
+        float consumptionRate = GameManager.Instance.Resources.GetConsumptionRate(resourceID);
+        return productionRate - consumptionRate;
     }
     
     /// <summary>
-    /// Refresh the entire resource view (called when visibility changes)
+    /// Refresh the entire resource view.  Called on initialization and when resources change visibility.
     /// </summary>
     public void RefreshResourceView()
     {
-        // Get visible resources
-        List<Resource> visibleResources = GameManager.Instance.Resources.GetVisibleResources();
+        ResourceManager resourceManager = GameManager.Instance.Resources;
+        List<Resource> visibleResources = resourceManager.GetVisibleResources();
         
-        // Remove resources that are no longer visible
-        List<string> resourcesToRemove = new List<string>();
-        foreach (var resourceID in resourceUIElements.Keys)
-        {
-            bool stillVisible = false;
-            foreach (var resource in visibleResources)
-            {
-                if (resource.Definition.ID == resourceID)
-                {
-                    stillVisible = true;
-                    break;
-                }
-            }
-            
-            if (!stillVisible)
-            {
-                resourcesToRemove.Add(resourceID);
-            }
-        }
+        // Clear existing UI elements
+        ClearContainer(resourceContainer);
+        resourceUIElements.Clear();
         
-        foreach (var resourceID in resourcesToRemove)
-        {
-            Destroy(resourceUIElements[resourceID].GameObject);
-            resourceUIElements.Remove(resourceID);
-        }
-        
-        // Add newly visible resources
+        // Create UI elements for visible resources
         foreach (var resource in visibleResources)
         {
-            if (!resourceUIElements.ContainsKey(resource.Definition.ID))
+            GameObject resourceUIObj = Instantiate(resourcePrefab, resourceContainer);
+            ResourceUI resourceUI = resourceUIObj.GetComponent<ResourceUI>();
+            if (resourceUI != null)
             {
-                CreateResourceUI(resource);
+                resourceUI.ResourceID = resource.Definition.ID;
+                resourceUI.NameText.text = resource.Definition.DisplayName;
+                resourceUI.Icon.sprite = resource.Definition.Icon;
+                resourceUIElements.Add(resource.Definition.ID, resourceUI);
+            }
+            else
+            {
+                Debug.LogError($"Resource prefab is missing ResourceUI component: {resource.Definition.ID}");
             }
         }
         
-        // Update values
+        // Initial update of resource values
         UpdateResourceValues();
-    }
-    
-    /// <summary>
-    /// Create UI element for a resource
-    /// </summary>
-    private void CreateResourceUI(Resource resource)
-    {
-        GameObject resourceUI = Instantiate(resourcePrefab, resourceContainer);
-        
-        // Get components
-        TMP_Text nameText = resourceUI.transform.Find("NameText").GetComponent<TMP_Text>();
-        TMP_Text valueText = resourceUI.transform.Find("ValueText").GetComponent<TMP_Text>();
-        TMP_Text rateText = resourceUI.transform.Find("RateText").GetComponent<TMP_Text>();
-        Image resourceIcon = resourceUI.transform.Find("Icon").GetComponent<Image>();
-        
-        // Set up UI
-        nameText.text = resource.Definition.DisplayName;
-        resourceIcon.sprite = resource.Definition.Icon;
-        
-        // Add to tracking
-        resourceUIElements[resource.Definition.ID] = new ResourceUI
-        {
-            GameObject = resourceUI,
-            ResourceID = resource.Definition.ID,
-            NameText = nameText,
-            ValueText = valueText,
-            RateText = rateText,
-            Icon = resourceIcon
-        };
     }
     
     #endregion
@@ -287,102 +194,126 @@ public class UIManager : MonoBehaviour
     #region Building UI
     
     /// <summary>
-    /// Refresh the entire building view (called when visibility changes)
+    /// Refresh the entire building view. Called on initialization and when buildings change visibility.
     /// </summary>
     public void RefreshBuildingView()
     {
-        // Clear existing building buttons
+        BuildingManager buildingManager = GameManager.Instance.Buildings;
+        List<Building> visibleBuildings = buildingManager.GetVisibleBuildings();
+        
+        // Clear existing UI elements
         ClearContainer(buildingContainer);
         
-        // Get visible buildings
-        List<Building> visibleBuildings = GameManager.Instance.Buildings.GetVisibleBuildings();
-        
-        // Create UI for each visible building
+        // Create UI elements for visible buildings
         foreach (var building in visibleBuildings)
         {
-            CreateBuildingUI(building);
-        }
-    }
-    
-    /// <summary>
-    /// Create UI element for a building
-    /// </summary>
-    private void CreateBuildingUI(Building building)
-    {
-        GameObject buildingUI = Instantiate(buildingPrefab, buildingContainer);
-        
-        // Get components
-        TMP_Text nameText = buildingUI.transform.Find("NameText").GetComponent<TMP_Text>();
-        TMP_Text countText = buildingUI.transform.Find("CountText").GetComponent<TMP_Text>();
-        Button buildButton = buildingUI.GetComponent<Button>();
-        Image buildingIcon = buildingUI.transform.Find("Icon").GetComponent<Image>();
-        
-        // Set up UI
-        nameText.text = building.Definition.DisplayName;
-        countText.text = building.Count.ToString();
-        
-        if (building.Definition.Icon != null)
-        {
-            buildingIcon.sprite = building.Definition.Icon;
-        }
-        
-        // Add button functionality
-        string buildingID = building.Definition.ID;
-        buildButton.onClick.AddListener(() => OnBuildingClicked(buildingID));
-        
-        // Set up tooltip
-        TooltipTrigger trigger = buildingUI.AddComponent<TooltipTrigger>();
-        trigger.TooltipType = TooltipType.Building;
-        trigger.ID = buildingID;
-        trigger.UIManager = this;
-        
-        // Update affordability
-        UpdateBuildingButtonState(buildingUI, buildingID);
-    }
-    
-    /// <summary>
-    /// Update all building buttons (for affordability)
-    /// </summary>
-    private void UpdateBuildingButtons()
-    {
-        foreach (Transform child in buildingContainer)
-        {
-            if (child.gameObject.activeSelf)
+            GameObject buildingUIObj = Instantiate(buildingPrefab, buildingContainer);
+            BuildingUI buildingUI = buildingUIObj.GetComponent<BuildingUI>();
+            if (buildingUI != null)
             {
-                TooltipTrigger trigger = child.GetComponent<TooltipTrigger>();
-                if (trigger != null && trigger.TooltipType == TooltipType.Building)
+                buildingUI.BuildingID = building.Definition.ID;
+                buildingUI.NameText.text = building.Definition.DisplayName;
+                buildingUI.DescriptionText.text = building.Definition.Description;
+                buildingUI.CountText.text = $"Owned: {building.Count}";
+                buildingUI.CostText.text = GetBuildingCostString(building.Definition.Cost); //show
+                buildingUI.SetButtonCost(building.Definition.Cost);
+                buildingUI.Icon.sprite = building.Definition.Icon;
+                
+                // Set the button's onClick to purchase this building
+                Button buyButton = buildingUI.GetComponentInChildren<Button>(); // Ensure you get the Button component.
+                if (buyButton != null)
                 {
-                    UpdateBuildingButtonState(child.gameObject, trigger.ID);
+                    buyButton.onClick.AddListener(() =>
+                    {
+                        if (GameManager.Instance.Buildings.CanAffordBuilding(building.Definition.ID))
+                        {
+                            GameManager.Instance.Buildings.PurchaseBuilding(building.Definition.ID);
+                            UpdateBuildingCount(building.Definition.ID); //update count
+                            UpdateResourceValues(); //update resources
+                            UpdateBuildingButtons();
+                            ShowTooltip(building.Definition.ID, UIType.Building); //update tooltip
+                        }
+                        else
+                        {
+                            // Optionally, show a message in the tooltip
+                            ShowTooltip(building.Definition.ID, UIType.Building, "Can't afford!");
+                        }
+                    });
+                }
+                else
+                {
+                    Debug.LogError($"Building prefab is missing Button component: {building.Definition.ID}");
+                }
+                
+                // Attach the tooltip trigger
+                TooltipTrigger trigger = buildingUI.gameObject.AddComponent<TooltipTrigger>();
+                trigger.uiManager = this; // Pass UIManager instance
+                trigger.TargetID = building.Definition.ID;
+                trigger.type = UIType.Building;
+            }
+            else
+            {
+                Debug.LogError($"Building prefab is missing BuildingUI component: {building.Definition.ID}");
+            }
+        }
+        UpdateBuildingButtons();
+    }
+    
+    /// <summary>
+    /// Update the display of a building's count.
+    /// </summary>
+    private void UpdateBuildingCount(string buildingID)
+    {
+        BuildingManager buildingManager = GameManager.Instance.Buildings;
+        Building building = buildingManager.GetBuilding(buildingID);
+        if (building != null)
+        {
+            Transform buildingUIElement = buildingContainer.Find(buildingID); //changed
+            if (buildingUIElement != null)
+            {
+                BuildingUI buildingUI = buildingUIElement.GetComponent<BuildingUI>();
+                if (buildingUI != null)
+                {
+                    buildingUI.CountText.text = $"Owned: {building.Count}";
                 }
             }
         }
     }
     
     /// <summary>
-    /// Update a building button's state based on affordability
+    /// Update building buttons, specifically their interactability based on resource availability.
     /// </summary>
-    private void UpdateBuildingButtonState(GameObject buttonObj, string buildingID)
+    private void UpdateBuildingButtons()
     {
-        Button button = buttonObj.GetComponent<Button>();
-        
-        bool canAfford = GameManager.Instance.Buildings.CanConstructBuilding(buildingID);
-        button.interactable = canAfford;
-        
-        // Update count text
-        TMP_Text countText = buttonObj.transform.Find("CountText").GetComponent<TMP_Text>();
-        Building building = GameManager.Instance.Buildings.GetBuilding(buildingID);
-        if (building != null)
+        BuildingManager buildingManager = GameManager.Instance.Buildings;
+        foreach (Transform child in buildingContainer)
         {
-            countText.text = building.Count.ToString();
+            BuildingUI buildingUI = child.GetComponent<BuildingUI>();
+            if (buildingUI != null)
+            {
+                string buildingID = buildingUI.BuildingID;
+                Button buyButton = buildingUI.GetComponentInChildren<Button>();
+                if (buyButton != null)
+                {
+                    buyButton.interactable = buildingManager.CanAffordBuilding(buildingID);
+                }
+            }
         }
     }
     
     /// <summary>
-    /// Handle click on a building button
+    /// Get the cost string.
     /// </summary>
-    private void OnBuildingClicked(string buildingID)
+    private string GetBuildingCostString(Dictionary<string, float> cost)
     {
-        GameManager.Instance.Buildings.ConstructBuilding(buildingID);
+        string costText = "Cost:";
+        foreach (var costItem in cost)
+        {
+            ResourceDefinition resource = GameManager.Instance.Resources.GetResourceDefinition(costItem.Key);
+            string resourceName = resource != null ? resource.DisplayName : costItem.Key;
+            costText += $"\n{resourceName}: {costItem.Value}";
+        }
+        return costText;
     }
     
     #endregion
@@ -390,181 +321,232 @@ public class UIManager : MonoBehaviour
     #region Upgrade UI
     
     /// <summary>
-    /// Refresh the entire upgrade view (called when visibility changes)
+    /// Refresh the entire upgrade view. Called on initialization and when upgrades change visibility.
     /// </summary>
     public void RefreshUpgradeView()
     {
-        // Clear existing upgrade buttons
+        UpgradeManager upgradeManager = GameManager.Instance.Upgrades;
+        List<Upgrade> visibleUpgrades = upgradeManager.GetVisibleUpgrades();
+        
+        // Clear existing UI elements
         ClearContainer(upgradeContainer);
         
-        // Get visible upgrades
-        List<Upgrade> visibleUpgrades = GameManager.Instance.Upgrades.GetVisibleUpgrades();
-        
-        // Create UI for each visible upgrade
+        // Create UI elements for visible upgrades
         foreach (var upgrade in visibleUpgrades)
         {
-            CreateUpgradeUI(upgrade);
+            GameObject upgradeUIObj = Instantiate(upgradePrefab, upgradeContainer);
+            UpgradeUI upgradeUI = upgradeUIObj.GetComponent<UpgradeUI>();
+            if (upgradeUI != null)
+            {
+                upgradeUI.UpgradeID = upgrade.Definition.ID;
+                upgradeUI.NameText.text = upgrade.Definition.DisplayName;
+                upgradeUI.DescriptionText.text = upgrade.Definition.Description;
+                upgradeUI.CostText.text = GetUpgradeCostString(upgrade.Definition.Cost);
+                upgradeUI.SetButtonCost(upgrade.Definition.Cost);
+                upgradeUI.Icon.sprite = upgrade.Definition.Icon;
+                
+                // Set the button's onClick to purchase this upgrade
+                Button buyButton = upgradeUI.GetComponentInChildren<Button>();
+                if (buyButton != null)
+                {
+                    buyButton.onClick.AddListener(() =>
+                    {
+                        if (GameManager.Instance.Upgrades.CanPurchaseUpgrade(upgrade.Definition.ID))
+                        {
+                            GameManager.Instance.Upgrades.PurchaseUpgrade(upgrade.Definition.ID);
+                            UpdateUpgradeButtons(); // Update button states after purchase
+                            RefreshUpgradeView();
+                            UpdateResourceValues();
+                            ShowTooltip(upgrade.Definition.ID, UIType.Upgrade);
+                        }
+                        else
+                        {
+                            ShowTooltip(upgrade.Definition.ID, UIType.Upgrade, "Can't afford!");
+                        }
+                    });
+                }
+                else
+                {
+                    Debug.LogError($"Upgrade prefab is missing Button component: {upgrade.Definition.ID}");
+                }
+                
+                // Attach the tooltip trigger.
+                TooltipTrigger trigger = upgradeUI.gameObject.AddComponent<TooltipTrigger>();
+                trigger.uiManager = this;  // Pass UIManager instance
+                trigger.TargetID = upgrade.Definition.ID;
+                trigger.type = UIType.Upgrade;
+            }
+            else
+            {
+                Debug.LogError($"Upgrade prefab is missing UpgradeUI component: {upgrade.Definition.ID}");
+            }
         }
+        UpdateUpgradeButtons();
     }
     
     /// <summary>
-    /// Create UI element for an upgrade
+    /// Updates the Upgrade buttons.
     /// </summary>
-    private void CreateUpgradeUI(Upgrade upgrade)
+    private void UpdateUpgradeButtons()
     {
-        GameObject upgradeUI = Instantiate(upgradePrefab, upgradeContainer);
-        
-        // Get components
-        TMP_Text nameText = upgradeUI.transform.Find("NameText").GetComponent<TMP_Text>();
-        Button purchaseButton = upgradeUI.GetComponent<Button>();
-        Image upgradeIcon = upgradeUI.transform.Find("Icon").GetComponent<Image>();
-        
-        // Set up UI
-        nameText.text = upgrade.Definition.DisplayName;
-        
-        if (upgrade.Definition.Icon != null)
+        UpgradeManager upgradeManager = GameManager.Instance.Upgrades;
+        foreach (Transform child in upgradeContainer)
         {
-            upgradeIcon.sprite = upgrade.Definition.Icon;
+            UpgradeUI upgradeUI = child.GetComponent<UpgradeUI>();
+            if (upgradeUI != null)
+            {
+                string upgradeID = upgradeUI.UpgradeID;
+                Button buyButton = upgradeUI.GetComponentInChildren<Button>();
+                if (buyButton != null)
+                {
+                    bool canPurchase = upgradeManager.CanPurchaseUpgrade(upgradeID);
+                    buyButton.interactable = canPurchase;
+                }
+            }
         }
-        
-        // Add button functionality
-        string upgradeID = upgrade.Definition.ID;
-        purchaseButton.onClick.AddListener(() => OnUpgradeClicked(upgradeID));
-        
-        // Update affordability
-        bool canAfford = GameManager.Instance.Upgrades.CanPurchaseUpgrade(upgradeID);
-        purchaseButton.interactable = canAfford;
-        
-        // Set up tooltip
-        TooltipTrigger trigger = upgradeUI.AddComponent<TooltipTrigger>();
-        trigger.TooltipType = TooltipType.Upgrade;
-        trigger.ID = upgradeID;
-        trigger.UIManager = this;
     }
     
     /// <summary>
-    /// Handle click on an upgrade button
+    /// Gets upgrade cost string.
     /// </summary>
-    private void OnUpgradeClicked(string upgradeID)
+    /// <param name="cost"></param>
+    /// <returns></returns>
+    private string GetUpgradeCostString(Dictionary<string, float> cost)
     {
-        GameManager.Instance.Upgrades.PurchaseUpgrade(upgradeID);
+        string costText = "Cost:";
+        foreach (var costItem in cost)
+        {
+            ResourceDefinition resource = GameManager.Instance.Resources.GetResourceDefinition(costItem.Key);
+            string resourceName = resource != null ? resource.DisplayName : costItem.Key;
+            costText += $"\n{resourceName}: {costItem.Value}";
+        }
+        return costText;
     }
     
     #endregion
     
-    #region Tooltip System
+    #region Tooltip
     
     /// <summary>
-    /// Show tooltip for a building
+    /// Show the tooltip with specified content.
     /// </summary>
-    public void ShowBuildingTooltip(string buildingID)
+    public void ShowTooltip(string targetID, UIType type, string message = null)
     {
-        Building building = GameManager.Instance.Buildings.GetBuilding(buildingID);
-        if (building == null) return;
-        
-        // Set tooltip content
-        tooltipTitle.text = building.Definition.DisplayName;
-        tooltipDescription.text = building.Definition.Description;
-        
-        // Cost
-        Dictionary<string, float> cost = GameManager.Instance.Buildings.CalculateBuildingCost(buildingID);
-        string costText = "Cost:";
-        foreach (var costItem in cost)
-        {
-            bool canAfford = GameManager.Instance.Resources.GetAmount(costItem.Key) >= costItem.Value;
-            string colorTag = canAfford ? "<color=white>" : "<color=red>";
-            
-            ResourceDefinition resource = GameManager.Instance.Resources.GetVisibleResources()
-                .Find(r => r.Definition.ID == costItem.Key)?.Definition;
-            string resourceName = resource != null ? resource.DisplayName : costItem.Key;
-            
-            costText += $"\n{colorTag}{resourceName}: {Mathf.Ceil(costItem.Value)}</color>";
-        }
-        tooltipCost.text = costText;
-        
-        // Effects (production, consumption, storage)
-        string effectsText = "";
-        
-        // Production
-        if (building.Definition.Production.Count > 0)
-        {
-            effectsText += "Production:";
-            foreach (var production in building.Definition.Production)
-            {
-                ResourceDefinition resource = GameManager.Instance.Resources.GetVisibleResources()
-                    .Find(r => r.Definition.ID == production.ResourceID)?.Definition;
-                string resourceName = resource != null ? resource.DisplayName : production.ResourceID;
-                
-                effectsText += $"\n+{production.Amount:F1} {resourceName}/s";
-            }
-        }
-        
-        // Consumption
-        if (building.Definition.Consumption.Count > 0)
-        {
-            if (effectsText.Length > 0) effectsText += "\n\n";
-            effectsText += "Consumption:";
-            foreach (var consumption in building.Definition.Consumption)
-            {
-                ResourceDefinition resource = GameManager.Instance.Resources.GetVisibleResources()
-                    .Find(r => r.Definition.ID == consumption.ResourceID)?.Definition;
-                string resourceName = resource != null ? resource.DisplayName : consumption.ResourceID;
-                
-                effectsText += $"\n-{consumption.Amount:F1} {resourceName}/s";
-            }
-        }
-        
-        // Storage
-        if (building.Definition.Capacity.Count > 0)
-        {
-            if (effectsText.Length > 0) effectsText += "\n\n";
-            effectsText += "Storage:";
-            foreach (var capacity in building.Definition.Capacity)
-            {
-                ResourceDefinition resource = GameManager.Instance.Resources.GetVisibleResources()
-                    .Find(r => r.Definition.ID == capacity.ResourceID)?.Definition;
-                string resourceName = resource != null ? resource.DisplayName : capacity.ResourceID;
-                
-                effectsText += $"\n+{capacity.Amount:F0} {resourceName}";
-            }
-        }
-        
-        tooltipEffects.text = effectsText;
-        
-        // Show tooltip
         tooltipPanel.SetActive(true);
+        string costText = "Cost:";
+        
+        switch (type)
+        {
+            case UIType.Building:
+                Building building = GameManager.Instance.Buildings.GetBuilding(targetID);
+                if (building != null)
+                {
+                    tooltipTitle.text = building.Definition.DisplayName;
+                    tooltipDescription.text = building.Definition.Description;
+                    
+                    foreach (var costItem in building.Definition.Cost)
+                    {
+                        bool canAfford = GameManager.Instance.Resources.GetAmount(costItem.Key) >= costItem.Value;
+                        string colorTag = canAfford ? "<color=white>" : "<color=red>";
+                        
+                        ResourceDefinition resource = GameManager.Instance.Resources.GetVisibleResources()
+                            .Find(r => r.Definition.ID == costItem.Key)?.Definition;
+                        string resourceName = resource != null ? resource.DisplayName : costItem.Key;
+                        
+                        costText += $"\n{colorTag}{resourceName}: {costItem.Value}</color>";
+                    }
+                    tooltipCost.text = costText;
+                    tooltipEffects.text = GetBuildingEffectsString(building.Definition);
+                }
+                break;
+            case UIType.Upgrade:
+                Upgrade upgrade = GameManager.Instance.Upgrades.GetUpgrade(targetID);
+                if (upgrade != null)
+                {
+                    tooltipTitle.text = upgrade.Definition.DisplayName;
+                    tooltipDescription.text = upgrade.Definition.Description;
+                    
+                    foreach (var costItem in upgrade.Definition.Cost)
+                    {
+                        bool canAfford = GameManager.Instance.Resources.GetAmount(costItem.Key) >= costItem.Value;
+                        string colorTag = canAfford ? "<color=white>" : "<color=red>";
+                        
+                        ResourceDefinition resource = GameManager.Instance.Resources.GetVisibleResources()
+                            .Find(r => r.Definition.ID == costItem.Key)?.Definition;
+                        string resourceName = resource != null ? resource.DisplayName : costItem.Key;
+                        
+                        costText += $"\n{colorTag}{resourceName}: {costItem.Value}</color>";
+                    }
+                    tooltipCost.text = costText;
+                    tooltipEffects.text = GetUpgradeEffectsString(upgrade.Definition);
+                }
+                break;
+            default:
+                tooltipTitle.text = "Error";
+                tooltipDescription.text = "Invalid tooltip type.";
+                tooltipCost.text = "";
+                tooltipEffects.text = "";
+                break;
+        }
+        
+        if (!string.IsNullOrEmpty(message))
+        {
+            tooltipDescription.text = message;
+        }
     }
     
     /// <summary>
-    /// Show tooltip for an upgrade
+    /// Hide the tooltip.
     /// </summary>
-    public void ShowUpgradeTooltip(string upgradeID)
+    public void HideTooltip()
     {
-        Upgrade upgrade = GameManager.Instance.Upgrades.GetUpgrade(upgradeID);
-        if (upgrade == null) return;
-        
-        // Set tooltip content
-        tooltipTitle.text = upgrade.Definition.DisplayName;
-        tooltipDescription.text = upgrade.Definition.Description;
-        
-        // Cost
-        string costText = "Cost:";
-        foreach (var costItem in upgrade.Definition.Cost)
-        {
-            bool canAfford = GameManager.Instance.Resources.GetAmount(costItem.Key) >= costItem.Value;
-            string colorTag = canAfford ? "<color=white>" : "<color=red>";
-            
-            ResourceDefinition resource = GameManager.Instance.Resources.GetVisibleResources()
-                .Find(r => r.Definition.ID == costItem.Key)?.Definition;
-            string resourceName = resource != null ? resource.DisplayName : costItem.Key;
-            
-            costText += $"\n{colorTag}{resourceName}: {costItem.Value}</color>";
-        }
-        tooltipCost.text = costText;
-        
-        // Effects
+        tooltipPanel.SetActive(false);
+    }
+    
+    /// <summary>
+    /// Get building effects.
+    /// </summary>
+    private string GetBuildingEffectsString(BuildingDefinition building)
+    {
         string effectsText = "Effects:";
-        foreach (var effect in upgrade.Definition.Effects)
+        foreach (var production in building.Production)
+        {
+            ResourceDefinition resource = GameManager.Instance.Resources.GetVisibleResources()
+                .Find(r => r.Definition.ID == production.ResourceID)?.Definition;
+            string resourceName = resource != null ? resource.DisplayName : production.ResourceID;
+            effectsText += $"\n+{production.Amount}/s {resourceName}";
+        }
+        
+        foreach (var consumption in building.Consumption)
+        {
+            ResourceDefinition resource = GameManager.Instance.Resources.GetVisibleResources()
+                .Find(r => r.Definition.ID == consumption.ResourceID)?.Definition;
+            string resourceName = resource != null ? resource.DisplayName : consumption.ResourceID;
+            effectsText += $"\n-{consumption.Amount}/s {resourceName}";
+        }
+        
+        foreach (var capacity in building.Capacity)
+        {
+            ResourceDefinition resource = GameManager.Instance.Resources.GetVisibleResources()
+                .Find(r => r.Definition.ID == capacity.ResourceID)?.Definition;
+            string resourceName = resource != null ? resource.DisplayName : capacity.ResourceID;
+            effectsText += $"\n+{capacity.Amount} {resourceName} Capacity";
+        }
+        
+        if (effectsText == "Effects:")
+        {
+            effectsText = "Effects:\nNone";
+        }
+        return effectsText;
+    }
+    
+    /// <summary>
+    /// Get upgrade effects string.
+    /// </summary>
+    private string GetUpgradeEffectsString(UpgradeDefinition upgrade)
+    {
+        string effectsText = "Effects:";
+        foreach (var effect in upgrade.Effects)
         {
             switch (effect.Type)
             {
@@ -574,3 +556,71 @@ public class UIManager : MonoBehaviour
                     string prodResourceName = prodResource != null ? prodResource.DisplayName : effect.TargetID;
                     effectsText += $"\n+{(effect.Value - 1) * 100:F0}% {prodResourceName} production";
                     break;
+                case EffectType.BuildingProductionMultiplier:
+                    BuildingDefinition buildingDef = GameManager.Instance.Buildings.GetBuildingDefinition(effect.TargetID);
+                    string buildingName = buildingDef != null ? buildingDef.DisplayName : effect.TargetID;
+                    effectsText += $"\n+{(effect.Value - 1) * 100:F0}% {buildingName} production";
+                    break;
+                case EffectType.ResourceCapacityMultiplier:
+                    ResourceDefinition capResource = GameManager.Instance.Resources.GetVisibleResources()
+                       .Find(r => r.Definition.ID == effect.TargetID)?.Definition;
+                    string capResourceName = capResource != null ? capResource.DisplayName : effect.TargetID;
+                    effectsText += $"\n+{(effect.Value - 1) * 100:F0}% {capResourceName} capacity";
+                    break;
+                case EffectType.UnlockBuilding:
+                    BuildingDefinition unlockBuildingDef = GameManager.Instance.Buildings.GetBuildingDefinition(effect.TargetID);
+                    string unlockBuildingName = unlockBuildingDef != null ? unlockBuildingDef.DisplayName: effect.TargetID;
+                    effectsText += $"\nUnlocks {unlockBuildingName}";
+                    break;
+                case EffectType.UnlockUpgrade:
+                    UpgradeDefinition unlockUpgradeDef = GameManager.Instance.Upgrades.GetUpgradeDefinition(effect.TargetID);
+                    string unlockUpgradeName = unlockUpgradeDef != null ? unlockUpgradeDef.DisplayName : effect.TargetID;
+                    effectsText += $"\nUnlocks {unlockUpgradeName}";
+                    break;
+                default:
+                    effectsText += $"\nUnknown effect type: {effect.Type}";
+                    break;
+            }
+        }
+        if (effectsText == "Effects:")
+        {
+            effectsText = "Effects:\nNone";
+        }
+        return effectsText;
+    }
+    
+    #endregion
+    
+    #region Helper Methods
+    
+    /// <summary>
+    /// Clear all children from a transform.
+    /// </summary>
+    private void ClearContainer(Transform container)
+    {
+        foreach (Transform child in container)
+        {
+            Destroy(child.gameObject);
+        }
+    }
+    
+    #endregion
+}
+
+/// <summary>
+/// Enum for UI tabs
+/// </summary>
+public enum UITab
+{
+    Buildings,
+    Upgrades
+}
+
+/// <summary>
+/// Enum for UI element types for tooltips
+/// </summary>
+public enum UIType
+{
+    Building,
+    Upgrade
+}
