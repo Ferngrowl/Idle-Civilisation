@@ -12,5 +12,5 @@ public class BuildingUI : MonoBehaviour
     public TMP_Text CostText;
     public Image Icon;
     
-    public void SetButtonCost(Dictionary<string, float> cost) { /* Implementation */ }
+    public void SetButtonCost(List<ResourceAmount> cost) { /* implementation */ }
 }

@@ -3,6 +3,8 @@ using UnityEngine;
 using UnityEngine.UI;
 using TMPro;
 using System;
+using UnityEngine.EventSystems;
+using System.Linq;
 
 /// <summary>
 /// Manages all UI elements and interactions in the game. Handles resources display, building lists,
@@ -17,17 +19,20 @@ public class UIManager : MonoBehaviour
     private float resourceUpdateTimer;
     private Dictionary<string, ResourceUI> resourceUIElements = new Dictionary<string, ResourceUI>();
     
+    
     [Header("Building UI")]
     [SerializeField] private Transform buildingContainer;
     [SerializeField] private GameObject buildingPrefab;
     [SerializeField] private TMP_Text buildingTabButton;
     [SerializeField] private GameObject buildingPanel;
+    private Dictionary<string, BuildingUI> buildingUIElements = new Dictionary<string, BuildingUI>();
     
     [Header("Upgrade UI")]
     [SerializeField] private Transform upgradeContainer;
     [SerializeField] private GameObject upgradePrefab;
     [SerializeField] private TMP_Text upgradeTabButton;
     [SerializeField] private GameObject upgradePanel;
+    private Dictionary<string, UpgradeUI> upgradeUIElements = new Dictionary<string, UpgradeUI>(); 
     
     [Header("Tooltip")]
     [SerializeField] private GameObject tooltipPanel;
@@ -35,6 +40,10 @@ public class UIManager : MonoBehaviour
     [SerializeField] private TMP_Text tooltipDescription;
     [SerializeField] private TMP_Text tooltipCost;
     [SerializeField] private TMP_Text tooltipEffects;
+
+    [Header("Tab Visuals")]
+    [SerializeField] private GameObject buildingTabHighlight;
+    [SerializeField] private GameObject upgradeTabHighlight;
     
     // UI State tracking
     private UITab currentTab = UITab.Buildings;
@@ -72,9 +81,13 @@ public class UIManager : MonoBehaviour
             UpdateResourceValues();
             resourceUpdateTimer = 0f;
             
-            // Also update building buttons (for affordability)
+            // Also update building and upgrade buttons (for affordability)
             UpdateBuildingButtons();
+            UpdateUpgradeButtons();
         }
+
+        // Check for mouse hover to show tooltips
+        CheckForHover();
     }
     
     #region Tab Management
@@ -104,16 +117,19 @@ public class UIManager : MonoBehaviour
         // Update tab button states
         UpdateTabButtons();
     }
+
+    public void OnClickButtonPressed()
+    {
+        GameManager.Instance.Resources.AddResource("wood", 1);
+    }
     
     /// <summary>
     /// Update tab button visual states
     /// </summary>
     private void UpdateTabButtons()
     {
-        Color activeColor = new Color(1f, 1f, 1f, 1f);
-        Color inactiveColor = new Color(0.7f, 0.7f, 0.7f, 1f);
-        buildingTabButton.color = (currentTab == UITab.Buildings) ? activeColor : inactiveColor;
-        upgradeTabButton.color = (currentTab == UITab.Upgrades) ? activeColor : inactiveColor;
+        buildingTabHighlight.SetActive(currentTab == UITab.Buildings);
+        upgradeTabHighlight.SetActive(currentTab == UITab.Upgrades);
     }
     
     #endregion
@@ -140,7 +156,46 @@ public class UIManager : MonoBehaviour
             string rateText = productionRate >= 0 ? $"+{productionRate:F1}/s" : $"{productionRate:F1}/s";
             resourceUI.RateText.text = rateText;
             resourceUI.RateText.color = productionRate >= 0 ? Color.green : Color.red;
+
+            // Time until full or empty
+            if (capacity > 0)
+            {
+                if (productionRate > 0)
+                {
+                    float timeUntilFull = (capacity - amount) / productionRate;
+                    resourceUI.TimeUntilFullText.text = $"Full in: {FormatTime(timeUntilFull, true)}";
+                }
+                else if (productionRate < 0)
+                {
+                    float timeUntilEmpty = amount / -productionRate;
+                    resourceUI.TimeUntilFullText.text = $"Empty in: {FormatTime(timeUntilEmpty, false)}";
+                }
+                else
+                {
+                    resourceUI.TimeUntilFullText.text = "";
+                }
+            }
+            else
+            {
+                resourceUI.TimeUntilFullText.text = "";
+            }
         }
+    }
+
+    private string FormatTime(float time, bool isPositive)
+    {
+        if (time <= 0) return "";
+        float absTime = Mathf.Abs(time);
+        TimeSpan t = TimeSpan.FromSeconds(absTime);
+        
+        if (absTime < 60) // Less than a minute
+            return $"{(int)absTime}s";
+        else if (absTime < 3600) // Less than an hour
+            return $"{t.Minutes:D2}m:{t.Seconds:D2}s";
+        else if (absTime < 86400) // Less than a day
+            return $"{t.Hours:D2}h:{t.Minutes:D2}m";
+        else // Days and hours
+            return $"{(int)t.TotalDays}d {t.Hours}h";
     }
     
     /// <summary>
@@ -184,9 +239,13 @@ public class UIManager : MonoBehaviour
                 Debug.LogError($"Resource prefab is missing ResourceUI component: {resource.Definition.ID}");
             }
         }
+
+        // Force layout update
+        LayoutRebuilder.ForceRebuildLayoutImmediate(resourceContainer.GetComponent<RectTransform>());
         
         // Initial update of resource values
         UpdateResourceValues();
+
     }
     
     #endregion
@@ -203,22 +262,32 @@ public class UIManager : MonoBehaviour
         
         // Clear existing UI elements
         ClearContainer(buildingContainer);
+        buildingUIElements.Clear();
         
         // Create UI elements for visible buildings
         foreach (var building in visibleBuildings)
         {
             GameObject buildingUIObj = Instantiate(buildingPrefab, buildingContainer);
             BuildingUI buildingUI = buildingUIObj.GetComponent<BuildingUI>();
-            buildingUIObj.name = building.Definition.ID; 
+            buildingUIElements[building.Definition.ID] = buildingUI;
+
             if (buildingUI != null)
             {
                 buildingUI.BuildingID = building.Definition.ID;
                 buildingUI.NameText.text = building.Definition.DisplayName;
                 buildingUI.DescriptionText.text = building.Definition.Description;
                 buildingUI.CountText.text = $"Owned: {building.Count}";
-                Dictionary<string, float> currentCost = GameManager.Instance.Buildings.CalculateBuildingCost(building.Definition.ID);
-                buildingUI.CostText.text = GetBuildingCostString(currentCost);
-                buildingUI.SetButtonCost(currentCost);
+
+                // Calculate current cost as Dictionary<string, float>
+                Dictionary<string, float> currentCostDict = 
+                    GameManager.Instance.Buildings.CalculateBuildingCost(building.Definition.ID);
+                
+                // Convert to List<ResourceAmount>
+                List<ResourceAmount> currentCostList = currentCostDict
+                    .Select(kvp => new ResourceAmount { ResourceID = kvp.Key, Amount = kvp.Value })
+                    .ToList();
+                buildingUI.CostText.text = GetBuildingCostString(currentCostList);
+                buildingUI.SetButtonCost(currentCostList);
                 buildingUI.Icon.sprite = building.Definition.Icon;
                 
                 // Set the button's onClick to purchase this building
@@ -258,7 +327,11 @@ public class UIManager : MonoBehaviour
                 Debug.LogError($"Building prefab is missing BuildingUI component: {building.Definition.ID}");
             }
         }
+
+        LayoutRebuilder.ForceRebuildLayoutImmediate(buildingContainer.GetComponent<RectTransform>());
+
         UpdateBuildingButtons();
+        
     }
     
     /// <summary>
@@ -266,19 +339,19 @@ public class UIManager : MonoBehaviour
     /// </summary>
     private void UpdateBuildingCount(string buildingID)
     {
-        BuildingManager buildingManager = GameManager.Instance.Buildings;
-        Building building = buildingManager.GetBuilding(buildingID);
-        if (building != null)
+        if (buildingUIElements.TryGetValue(buildingID, out BuildingUI buildingUI))
         {
-            Transform buildingUIElement = buildingContainer.Find(buildingID); //changed
-            if (buildingUIElement != null)
-            {
-                BuildingUI buildingUI = buildingUIElement.GetComponent<BuildingUI>();
-                if (buildingUI != null)
-                {
-                    buildingUI.CountText.text = $"Owned: {building.Count}";
-                }
-            }
+            Building building = GameManager.Instance.Buildings.GetBuilding(buildingID);
+            buildingUI.CountText.text = $"Owned: {building.Count}";
+            
+            // Calculate current cost and convert to List<ResourceAmount>
+            Dictionary<string, float> currentCostDict = 
+                GameManager.Instance.Buildings.CalculateBuildingCost(buildingID);
+            List<ResourceAmount> currentCostList = currentCostDict
+                .Select(kvp => new ResourceAmount { ResourceID = kvp.Key, Amount = kvp.Value })
+                .ToList();
+            
+            buildingUI.CostText.text = GetBuildingCostString(currentCostList);
         }
     }
     
@@ -287,33 +360,38 @@ public class UIManager : MonoBehaviour
     /// </summary>
     private void UpdateBuildingButtons()
     {
-        BuildingManager buildingManager = GameManager.Instance.Buildings;
-        foreach (Transform child in buildingContainer)
+        foreach (var entry in buildingUIElements)
         {
-            BuildingUI buildingUI = child.GetComponent<BuildingUI>();
-            if (buildingUI != null)
+            BuildingUI buildingUI = entry.Value;
+            bool canAfford = GameManager.Instance.Buildings.CanConstructBuilding(entry.Key);
+            
+            // Update both container and button
+            Button buyButton = buildingUI.GetComponentInChildren<Button>();
+            if (buyButton != null)
             {
-                string buildingID = buildingUI.BuildingID;
-                Button buyButton = buildingUI.GetComponentInChildren<Button>();
-                if (buyButton != null)
+                buyButton.interactable = canAfford;
+                
+                // Change text color for better visibility
+                TMP_Text buttonText = buyButton.GetComponentInChildren<TMP_Text>();
+                if (buttonText != null)
                 {
-                    buyButton.interactable = buildingManager.CanConstructBuilding(buildingID);                
+                    buttonText.color = canAfford ? Color.white : new Color(0.3f, 0.3f, 0.3f); // Dark gray for better contrast
                 }
             }
+            
         }
     }
     
     /// <summary>
     /// Get the cost string.
     /// </summary>
-    private string GetBuildingCostString(Dictionary<string, float> cost)
+    private string GetBuildingCostString(List<ResourceAmount> cost)
     {
         string costText = "Cost:";
         foreach (var costItem in cost)
         {
-            ResourceDefinition resource = GameManager.Instance.Resources.GetVisibleResources().Find(r => r.Definition.ID == costItem.Key)?.Definition;
-            string resourceName = resource != null ? resource.DisplayName : costItem.Key;
-            costText += $"\n{resourceName}: {costItem.Value}";
+            ResourceDefinition resource = GameManager.Instance.Resources.GetResourceDefinition(costItem.ResourceID);
+            costText += $"\n{resource.DisplayName}: {costItem.Amount}";
         }
         return costText;
     }
@@ -332,12 +410,15 @@ public class UIManager : MonoBehaviour
         
         // Clear existing UI elements
         ClearContainer(upgradeContainer);
+        upgradeUIElements.Clear();
         
         // Create UI elements for visible upgrades
         foreach (var upgrade in visibleUpgrades)
         {
             GameObject upgradeUIObj = Instantiate(upgradePrefab, upgradeContainer);
             UpgradeUI upgradeUI = upgradeUIObj.GetComponent<UpgradeUI>();
+            upgradeUIElements.Add(upgrade.Definition.ID, upgradeUI);
+            
             if (upgradeUI != null)
             {
                 upgradeUI.UpgradeID = upgrade.Definition.ID;
@@ -356,8 +437,7 @@ public class UIManager : MonoBehaviour
                         if (GameManager.Instance.Upgrades.CanPurchaseUpgrade(upgrade.Definition.ID))
                         {
                             GameManager.Instance.Upgrades.PurchaseUpgrade(upgrade.Definition.ID);
-                            UpdateUpgradeButtons(); // Update button states after purchase
-                            RefreshUpgradeView();
+                            UpdateUpgradeButtons(); 
                             UpdateResourceValues();
                             ShowTooltip(upgrade.Definition.ID, UIType.Upgrade);
                         }
@@ -383,6 +463,9 @@ public class UIManager : MonoBehaviour
                 Debug.LogError($"Upgrade prefab is missing UpgradeUI component: {upgrade.Definition.ID}");
             }
         }
+
+        // Force layout update
+        LayoutRebuilder.ForceRebuildLayoutImmediate(upgradeContainer.GetComponent<RectTransform>());
         UpdateUpgradeButtons();
     }
     
@@ -392,17 +475,18 @@ public class UIManager : MonoBehaviour
     private void UpdateUpgradeButtons()
     {
         UpgradeManager upgradeManager = GameManager.Instance.Upgrades;
-        foreach (Transform child in upgradeContainer)
+        foreach (var upgradeUI in upgradeUIElements.Values)
         {
-            UpgradeUI upgradeUI = child.GetComponent<UpgradeUI>();
-            if (upgradeUI != null)
+            string upgradeID = upgradeUI.UpgradeID;
+            Button buyButton = upgradeUI.GetComponentInChildren<Button>();
+            if (buyButton != null)
             {
-                string upgradeID = upgradeUI.UpgradeID;
-                Button buyButton = upgradeUI.GetComponentInChildren<Button>();
-                if (buyButton != null)
+                bool canPurchase = upgradeManager.CanPurchaseUpgrade(upgradeID);
+                buyButton.interactable = canPurchase;
+                TMP_Text buttonText = buyButton.GetComponentInChildren<TMP_Text>();
+                if (buttonText != null)
                 {
-                    bool canPurchase = upgradeManager.CanPurchaseUpgrade(upgradeID);
-                    buyButton.interactable = canPurchase;
+                    buttonText.color = canPurchase ? Color.white : new Color(0.3f, 0.3f, 0.3f);
                 }
             }
         }
@@ -413,14 +497,13 @@ public class UIManager : MonoBehaviour
     /// </summary>
     /// <param name="cost"></param>
     /// <returns></returns>
-    private string GetUpgradeCostString(Dictionary<string, float> cost)
+    private string GetUpgradeCostString(List<ResourceAmount> cost)
     {
         string costText = "Cost:";
         foreach (var costItem in cost)
         {
-            ResourceDefinition resource = GameManager.Instance.Resources.GetVisibleResources().Find(r => r.Definition.ID == costItem.Key)?.Definition;
-            string resourceName = resource != null ? resource.DisplayName : costItem.Key;
-            costText += $"\n{resourceName}: {costItem.Value}";
+            ResourceDefinition resource = GameManager.Instance.Resources.GetResourceDefinition(costItem.ResourceID);
+            costText += $"\n{resource.DisplayName}: {costItem.Amount}";
         }
         return costText;
     }
@@ -440,12 +523,12 @@ public class UIManager : MonoBehaviour
         switch (type)
         {
             case UIType.Building:
-                Building building = GameManager.Instance.Buildings.GetBuilding(targetID);
-                if (building != null)
-                {
-                    var currentCost = GameManager.Instance.Buildings.CalculateBuildingCost(targetID);
-                    tooltipTitle.text = building.Definition.DisplayName;
-                    tooltipDescription.text = building.Definition.Description;
+                    BuildingDefinition buildingDef = GameManager.Instance.Buildings.GetBuildingDefinition(targetID);
+                    if (buildingDef != null)
+                    {
+                        var currentCost = GameManager.Instance.Buildings.CalculateBuildingCost(targetID);
+                        tooltipTitle.text = buildingDef.DisplayName;
+                        tooltipDescription.text = buildingDef.Description;
                     
                     foreach (var costItem in currentCost)
                     {
@@ -459,29 +542,28 @@ public class UIManager : MonoBehaviour
                         costText += $"\n{colorTag}{resourceName}: {costItem.Value}</color>";
                     }
                     tooltipCost.text = costText;
-                    tooltipEffects.text = GetBuildingEffectsString(building.Definition);
+                    tooltipEffects.text = GetBuildingEffectsString(buildingDef);
                 }
                 break;
             case UIType.Upgrade:
-                Upgrade upgrade = GameManager.Instance.Upgrades.GetUpgrade(targetID);
-                if (upgrade != null)
-                {
-                    tooltipTitle.text = upgrade.Definition.DisplayName;
-                    tooltipDescription.text = upgrade.Definition.Description;
-                    
-                    foreach (var costItem in upgrade.Definition.Cost)
+                    UpgradeDefinition upgradeDef = GameManager.Instance.Upgrades.GetUpgradeDefinition(targetID);
+                    if (upgradeDef != null)
                     {
-                        bool canAfford = GameManager.Instance.Resources.GetAmount(costItem.Key) >= costItem.Value;
+                        tooltipTitle.text = upgradeDef.DisplayName;
+                        tooltipDescription.text = upgradeDef.Description;
+                    foreach (var costItem in upgradeDef.Cost)
+                    {
+                        bool canAfford = GameManager.Instance.Resources.GetAmount(costItem.ResourceID) >= costItem.Amount;
                         string colorTag = canAfford ? "<color=white>" : "<color=red>";
                         
                         ResourceDefinition resource = GameManager.Instance.Resources.GetVisibleResources()
-                            .Find(r => r.Definition.ID == costItem.Key)?.Definition;
-                        string resourceName = resource != null ? resource.DisplayName : costItem.Key;
+                            .Find(r => r.Definition.ID == costItem.ResourceID)?.Definition;
+                        string resourceName = resource != null ? resource.DisplayName : costItem.ResourceID;
                         
-                        costText += $"\n{colorTag}{resourceName}: {costItem.Value}</color>";
+                        costText += $"\n{colorTag}{resourceName}: {costItem.Amount}</color>";
                     }
                     tooltipCost.text = costText;
-                    tooltipEffects.text = GetUpgradeEffectsString(upgrade.Definition);
+                    tooltipEffects.text = GetUpgradeEffectsString(upgradeDef);
                 }
                 break;
             default:
@@ -496,6 +578,29 @@ public class UIManager : MonoBehaviour
         {
             tooltipDescription.text = message;
         }
+
+        // Position tooltip relative to mouse
+        Vector2 mousePos = Input.mousePosition;
+        RectTransform tooltipRect = tooltipPanel.GetComponent<RectTransform>();
+        Vector2 tooltipSize = tooltipRect.sizeDelta;
+        Canvas canvas = tooltipPanel.GetComponentInParent<Canvas>();
+        Vector2 viewportSize = new Vector2(Screen.width, Screen.height);
+
+        // Position tooltip based on available space
+        float rightSpace = viewportSize.x - mousePos.x;
+        float topSpace = viewportSize.y - mousePos.y;
+        tooltipRect.pivot = new Vector2(
+            rightSpace < tooltipSize.x ? 1 : 0,
+            topSpace < tooltipSize.y ? 1 : 0
+        );
+
+        // Add padding from cursor
+        Vector2 offset = new Vector2(
+            tooltipRect.pivot.x == 1 ? -10 : 10, 
+            tooltipRect.pivot.y == 1 ? -10 : 10
+        );
+        tooltipPanel.transform.position = mousePos + offset;
+
     }
     
     /// <summary>
@@ -590,6 +695,32 @@ public class UIManager : MonoBehaviour
             effectsText = "Effects:\nNone";
         }
         return effectsText;
+    }
+
+    private void CheckForHover()
+    {
+        if (EventSystem.current.IsPointerOverGameObject())
+        {
+            PointerEventData pointerData = new PointerEventData(EventSystem.current)
+            {
+                position = Input.mousePosition
+            };
+
+            List<RaycastResult> results = new List<RaycastResult>();
+            EventSystem.current.RaycastAll(pointerData, results);
+
+            foreach (var result in results)
+            {
+                TooltipTrigger trigger = result.gameObject.GetComponent<TooltipTrigger>();
+                if (trigger != null)
+                {
+                    ShowTooltip(trigger.TargetID, trigger.type);
+                    return; // Exit after showing the tooltip for the first valid target
+                }
+            }
+        }
+        // If no valid hover target is found, hide the tooltip
+        HideTooltip();
     }
     
     #endregion

@@ -98,7 +98,9 @@ public class UpgradeManager : MonoBehaviour
         }
         
         // Check if we can afford it
-        return GameManager.Instance.Resources.CanAfford(upgrade.Definition.Cost);
+        return GameManager.Instance.Resources.CanAfford(
+            upgrade.Definition.Cost.ToDictionary(r => r.ResourceID, r => r.Amount)
+        );
     }
     
     public void PurchaseUpgrade(string upgradeID)
@@ -109,7 +111,9 @@ public class UpgradeManager : MonoBehaviour
         Upgrade upgrade = upgrades[upgradeID];
         
         // Spend resources
-        GameManager.Instance.Resources.SpendResources(upgrade.Definition.Cost);
+        GameManager.Instance.Resources.SpendResources(
+            upgrade.Definition.Cost.ToDictionary(r => r.ResourceID, r => r.Amount)
+        );
         
         // Mark as purchased
         upgrade.IsPurchased = true;
@@ -319,7 +323,7 @@ public class UpgradeDefinition
     public List<UpgradeVisibilityRequirement> VisibilityRequirements = new List<UpgradeVisibilityRequirement>();
     
     // Cost to purchase the upgrade
-    public Dictionary<string, float> Cost = new Dictionary<string, float>();
+    public List<ResourceAmount> Cost = new List<ResourceAmount>();
     
     // IDs of other upgrades that must be purchased first
     public List<string> Prerequisites = new List<string>();

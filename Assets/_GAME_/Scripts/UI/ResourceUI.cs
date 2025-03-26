@@ -9,4 +9,5 @@ public class ResourceUI : MonoBehaviour
     public TMP_Text ValueText;
     public TMP_Text RateText;
     public Image Icon;
+    public TMP_Text TimeUntilFullText;
 }
