@@ -26,20 +26,7 @@ public class ResourceManager : MonoBehaviour
             resources[definition.ID] = new Resource(definition);
         }
         
-        // Register resource visibility conditions
-        SetupResourceVisibility();
-    }
-    
-    /// <summary>
-    /// Setup advanced visibility conditions for resources
-    /// </summary>
-    private void SetupResourceVisibility()
-    {
-        // Example: Wood becomes visible after 10 catnip is collected
-        if (resources.ContainsKey("wood") && resources.ContainsKey("catnip"))
-        {
-            resources["wood"].VisibilityCondition = () => GetAmount("catnip") >= 10f;
-        }
+        // Setup any initial resource states or custom visibility logic here if needed
     }
     
     public void Tick(float deltaTime)
@@ -91,7 +78,7 @@ public class ResourceManager : MonoBehaviour
     /// </summary>
     private float CalculateConsumptionRate(string resourceID)
     {
-        float consumption = 0f;
+        float baseConsumption = 0f;
         
         // Get consumption from buildings
         var buildings = GameManager.Instance.Buildings.GetAllBuildings();
@@ -101,12 +88,41 @@ public class ResourceManager : MonoBehaviour
             {
                 if (consump.ResourceID == resourceID)
                 {
-                    consumption += consump.Amount * building.Count;
+                    baseConsumption += consump.Amount * building.Count;
                 }
             }
         }
         
-        return consumption;
+        // Apply consumption reduction from upgrades
+        float multiplier = CalculateConsumptionReductionMultiplier(resourceID);
+        
+        return baseConsumption * multiplier;
+    }
+    
+    /// <summary>
+    /// Calculates consumption reduction multiplier from upgrades
+    /// </summary>
+    private float CalculateConsumptionReductionMultiplier(string resourceID)
+    {
+        float multiplier = 1f;
+        
+        // Apply multipliers from upgrades
+        if (GameManager.Instance.Upgrades != null)
+        {
+            var upgrades = GameManager.Instance.Upgrades.GetAllPurchasedUpgrades();
+            foreach (var upgrade in upgrades)
+            {
+                foreach (var effect in upgrade.Definition.Effects)
+                {
+                    if (effect.Type == EffectType.ConsumptionReduction && effect.TargetID == resourceID)
+                    {
+                        multiplier *= effect.Value; // Reduction value should be < 1.0
+                    }
+                }
+            }
+        }
+        
+        return multiplier;
     }
     
     /// <summary>
@@ -200,14 +216,44 @@ public class ResourceManager : MonoBehaviour
     {
         if (resources.ContainsKey(resourceID))
         {
-            resources[resourceID].Capacity = capacity;
+            // Apply any storage multipliers from upgrades
+            float multiplier = CalculateStorageMultiplier(resourceID);
+            resources[resourceID].Capacity = capacity * multiplier;
             
             // Cap current amount if it exceeds new capacity
-            if (resources[resourceID].Amount > capacity)
+            if (resources[resourceID].Amount > resources[resourceID].Capacity)
             {
-                resources[resourceID].Amount = capacity;
+                resources[resourceID].Amount = resources[resourceID].Capacity;
             }
         }
+    }
+    
+    /// <summary>
+    /// Calculates storage multiplier from upgrades
+    /// </summary>
+    private float CalculateStorageMultiplier(string resourceID)
+    {
+        float multiplier = 1f;
+        
+        // Apply multipliers from upgrades
+        if (GameManager.Instance.Upgrades != null)
+        {
+            var upgrades = GameManager.Instance.Upgrades.GetAllPurchasedUpgrades();
+            foreach (var upgrade in upgrades)
+            {
+                foreach (var effect in upgrade.Definition.Effects)
+                {
+                    if ((effect.Type == EffectType.StorageMultiplier || 
+                         effect.Type == EffectType.ResourceCapacityMultiplier) && 
+                        effect.TargetID == resourceID)
+                    {
+                        multiplier *= effect.Value;
+                    }
+                }
+            }
+        }
+        
+        return multiplier;
     }
     
     public void UnlockResource(string resourceID)

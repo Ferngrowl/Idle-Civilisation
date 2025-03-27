@@ -12,5 +12,20 @@ public class BuildingUI : MonoBehaviour
     public TMP_Text CostText;
     public Image Icon;
     
-    public void SetButtonCost(List<ResourceAmount> cost) { /* implementation */ }
+    public void SetButtonCost(List<ResourceAmount> cost)
+    {
+        if (cost == null || cost.Count == 0)
+        {
+            CostText.text = "Free";
+            return;
+        }
+
+        string costString = "";
+        for (int i = 0; i < cost.Count; i++)
+        {
+            if (i > 0) costString += "\n";
+            costString += $"{cost[i].Amount} {cost[i].ResourceID}";
+        }
+        CostText.text = costString;
+    }
 }

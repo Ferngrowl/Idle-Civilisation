@@ -38,7 +38,7 @@ public class BuildingManager : MonoBehaviour
     {
         foreach (var building in buildings.Values)
         {
-            if (building.Definition.VisibilityRequirements.Count > 0)
+            if (building.Definition.VisibilityRequirements != null && building.Definition.VisibilityRequirements.Count > 0)
             {
                 building.VisibilityCondition = () => 
                     building.Definition.VisibilityRequirements.All(req =>

@@ -37,7 +37,7 @@ public class UpgradeManager : MonoBehaviour
     {
         foreach (var upgrade in upgrades.Values)
         {
-            if (upgrade.Definition.VisibilityRequirements?.Count > 0)
+            if (upgrade.Definition.VisibilityRequirements != null && upgrade.Definition.VisibilityRequirements.Count > 0)
             {
                 upgrade.VisibilityCondition = () => 
                     upgrade.Definition.VisibilityRequirements.All(req =>
@@ -61,15 +61,28 @@ public class UpgradeManager : MonoBehaviour
     /// </summary>
     private void CheckVisibilityUpdates()
     {
-        bool visibilityChanged = false;
+        Dictionary<string, bool> oldVisibility = new Dictionary<string, bool>();
         
-        foreach (var upgrade in upgrades.Values)
+        // First, store all current visibility states
+        foreach (var pair in upgrades)
         {
-            bool wasVisible = upgrade.IsVisible;
-            // Visibility is recalculated when the property is accessed
-            if (upgrade.IsVisible != wasVisible)
+            oldVisibility[pair.Key] = pair.Value.IsVisible;
+        }
+        
+        // Reset all visibility conditions to force re-evaluation
+        SetupUpgradeVisibility();
+        
+        // Now check for changes
+        bool visibilityChanged = false;
+        foreach (var pair in upgrades)
+        {
+            bool wasVisible = oldVisibility[pair.Key];
+            bool isNowVisible = pair.Value.IsVisible;
+            
+            if (isNowVisible != wasVisible)
             {
                 visibilityChanged = true;
+                break;
             }
         }
         
@@ -86,15 +99,18 @@ public class UpgradeManager : MonoBehaviour
             
         Upgrade upgrade = upgrades[upgradeID];
         
-        // Check if upgrade is visible, unlocked, and not already purchased
-        if (!upgrade.IsVisible || !upgrade.IsUnlocked || upgrade.IsPurchased)
+        // Check if upgrade is available for purchase
+        if (!upgrade.IsAvailableForPurchase)
             return false;
             
         // Check if prerequisites are met
-        foreach (var prerequisite in upgrade.Definition.Prerequisites)
+        if (upgrade.Definition.Prerequisites != null)
         {
-            if (!IsUpgradePurchased(prerequisite))
-                return false;
+            foreach (var prerequisite in upgrade.Definition.Prerequisites)
+            {
+                if (!IsUpgradePurchased(prerequisite))
+                    return false;
+            }
         }
         
         // Check if we can afford it
@@ -138,15 +154,18 @@ public class UpgradeManager : MonoBehaviour
             switch (effect.Type)
             {
                 case EffectType.UnlockBuilding:
-                    GameManager.Instance.Buildings.UnlockBuilding(effect.TargetID);
+                    if (!string.IsNullOrEmpty(effect.TargetID))
+                        GameManager.Instance.Buildings.UnlockBuilding(effect.TargetID);
                     break;
                     
                 case EffectType.UnlockUpgrade:
-                    UnlockUpgrade(effect.TargetID);
+                    if (!string.IsNullOrEmpty(effect.TargetID))
+                        UnlockUpgrade(effect.TargetID);
                     break;
                     
                 case EffectType.UnlockResource:
-                    GameManager.Instance.Resources.UnlockResource(effect.TargetID);
+                    if (!string.IsNullOrEmpty(effect.TargetID))
+                        GameManager.Instance.Resources.UnlockResource(effect.TargetID);
                     break;
                     
                 case EffectType.ProductionMultiplier:
@@ -160,6 +179,14 @@ public class UpgradeManager : MonoBehaviour
                 case EffectType.ConsumptionReduction:
                     // Applied in resource consumption calculation
                     break;
+                    
+                case EffectType.BuildingProductionMultiplier:
+                    // Applied in building production calculation
+                    break;
+                    
+                case EffectType.ResourceCapacityMultiplier:
+                    // Applied in resource capacity calculation
+                    break;
             }
         }
     }
@@ -171,7 +198,9 @@ public class UpgradeManager : MonoBehaviour
     {
         foreach (var upgrade in upgrades.Values)
         {
-            if (!upgrade.IsUnlocked && upgrade.Definition.Prerequisites.Contains(purchasedUpgradeID))
+            if (!upgrade.IsUnlocked && 
+                upgrade.Definition.Prerequisites != null && 
+                upgrade.Definition.Prerequisites.Contains(purchasedUpgradeID))
             {
                 // Check if all prerequisites are now met
                 bool allPrerequisitesMet = true;
@@ -218,7 +247,7 @@ public class UpgradeManager : MonoBehaviour
         
         foreach (var upgrade in upgrades.Values)
         {
-            if (upgrade.IsVisible && !upgrade.IsPurchased)
+            if (upgrade.IsAvailableForPurchase)
             {
                 visibleUpgrades.Add(upgrade);
             }
@@ -357,7 +386,11 @@ public class Upgrade
     // Delegate for custom visibility conditions
     public Func<bool> VisibilityCondition { get; set; } = () => true;
     
-    public bool IsVisible => IsUnlocked && (Definition.VisibleByDefault || VisibilityCondition()) && !IsPurchased;
+    // Modified to separate showing purchased upgrades from showing available upgrades
+    public bool IsVisible => IsUnlocked && (Definition.VisibleByDefault || VisibilityCondition());
+    
+    // Use this to check if the upgrade should be shown in the available upgrades list
+    public bool IsAvailableForPurchase => IsVisible && !IsPurchased;
     
     public Upgrade(UpgradeDefinition definition)
     {

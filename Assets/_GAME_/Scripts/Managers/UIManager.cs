@@ -391,7 +391,8 @@ public class UIManager : MonoBehaviour
         foreach (var costItem in cost)
         {
             ResourceDefinition resource = GameManager.Instance.Resources.GetResourceDefinition(costItem.ResourceID);
-            costText += $"\n{resource.DisplayName}: {costItem.Amount}";
+            string resourceName = resource != null ? resource.DisplayName : costItem.ResourceID;
+            costText += $"\n{resourceName}: {costItem.Amount}";
         }
         return costText;
     }
@@ -503,7 +504,8 @@ public class UIManager : MonoBehaviour
         foreach (var costItem in cost)
         {
             ResourceDefinition resource = GameManager.Instance.Resources.GetResourceDefinition(costItem.ResourceID);
-            costText += $"\n{resource.DisplayName}: {costItem.Amount}";
+            string resourceName = resource != null ? resource.DisplayName : costItem.ResourceID;
+            costText += $"\n{resourceName}: {costItem.Amount}";
         }
         return costText;
     }
@@ -584,6 +586,19 @@ public class UIManager : MonoBehaviour
         RectTransform tooltipRect = tooltipPanel.GetComponent<RectTransform>();
         Vector2 tooltipSize = tooltipRect.sizeDelta;
         Canvas canvas = tooltipPanel.GetComponentInParent<Canvas>();
+        
+        // Convert mouse position to canvas space if using Screen Space - Camera or World Space
+        if (canvas.renderMode != RenderMode.ScreenSpaceOverlay)
+        {
+            RectTransformUtility.ScreenPointToLocalPointInRectangle(
+                canvas.GetComponent<RectTransform>(),
+                mousePos,
+                canvas.worldCamera,
+                out Vector2 localPoint
+            );
+            mousePos = localPoint;
+        }
+        
         Vector2 viewportSize = new Vector2(Screen.width, Screen.height);
 
         // Position tooltip based on available space
@@ -675,6 +690,18 @@ public class UIManager : MonoBehaviour
                     string capResourceName = capResource != null ? capResource.DisplayName : effect.TargetID;
                     effectsText += $"\n+{(effect.Value - 1) * 100:F0}% {capResourceName} capacity";
                     break;
+                case EffectType.StorageMultiplier:
+                    ResourceDefinition storageResource = GameManager.Instance.Resources.GetVisibleResources()
+                       .Find(r => r.Definition.ID == effect.TargetID)?.Definition;
+                    string storageResourceName = storageResource != null ? storageResource.DisplayName : effect.TargetID;
+                    effectsText += $"\n+{(effect.Value - 1) * 100:F0}% {storageResourceName} storage";
+                    break;
+                case EffectType.ConsumptionReduction:
+                    ResourceDefinition consumptionResource = GameManager.Instance.Resources.GetVisibleResources()
+                       .Find(r => r.Definition.ID == effect.TargetID)?.Definition;
+                    string consumptionResourceName = consumptionResource != null ? consumptionResource.DisplayName : effect.TargetID;
+                    effectsText += $"\n-{(1 - effect.Value) * 100:F0}% {consumptionResourceName} consumption";
+                    break;
                 case EffectType.UnlockBuilding:
                     BuildingDefinition unlockBuildingDef = GameManager.Instance.Buildings.GetBuildingDefinition(effect.TargetID);
                     string unlockBuildingName = unlockBuildingDef != null ? unlockBuildingDef.DisplayName: effect.TargetID;
@@ -684,6 +711,11 @@ public class UIManager : MonoBehaviour
                     UpgradeDefinition unlockUpgradeDef = GameManager.Instance.Upgrades.GetUpgradeDefinition(effect.TargetID);
                     string unlockUpgradeName = unlockUpgradeDef != null ? unlockUpgradeDef.DisplayName : effect.TargetID;
                     effectsText += $"\nUnlocks {unlockUpgradeName}";
+                    break;
+                case EffectType.UnlockResource:
+                    ResourceDefinition unlockResource = GameManager.Instance.Resources.GetResourceDefinition(effect.TargetID);
+                    string unlockResourceName = unlockResource != null ? unlockResource.DisplayName : effect.TargetID;
+                    effectsText += $"\nUnlocks {unlockResourceName}";
                     break;
                 default:
                     effectsText += $"\nUnknown effect type: {effect.Type}";
