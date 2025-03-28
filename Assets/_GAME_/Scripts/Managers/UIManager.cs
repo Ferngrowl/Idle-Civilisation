@@ -147,57 +147,35 @@ public class UIManager : MonoBehaviour
             string resourceID = resourceUI.ResourceID;
             float amount = resourceManager.GetAmount(resourceID);
             float capacity = resourceManager.GetCapacity(resourceID);
-            
-            // Update display
-            resourceUI.ValueText.text = capacity > 0 ? $"{Mathf.Floor(amount)}/{Mathf.Floor(capacity)}" : $"{Mathf.Floor(amount)}";
-            
-            // Production rate
             float productionRate = CalculateNetProductionRate(resourceID);
-            string rateText = productionRate >= 0 ? $"+{productionRate:F1}/s" : $"{productionRate:F1}/s";
-            resourceUI.RateText.text = rateText;
-            resourceUI.RateText.color = productionRate >= 0 ? Color.green : Color.red;
-
-            // Time until full or empty
-            if (capacity > 0)
+            
+            // Use the improved ResourceUI methods
+            resourceUI.UpdateResourceValue(amount, capacity, productionRate);
+            
+            // Calculate time until full/empty
+            if (capacity > 0 && productionRate != 0)
             {
-                if (productionRate > 0)
+                bool isFilling = productionRate > 0;
+                float timeRemaining;
+                
+                if (isFilling)
                 {
-                    float timeUntilFull = (capacity - amount) / productionRate;
-                    resourceUI.TimeUntilFullText.text = $"Full in: {FormatTime(timeUntilFull, true)}";
-                }
-                else if (productionRate < 0)
-                {
-                    float timeUntilEmpty = amount / -productionRate;
-                    resourceUI.TimeUntilFullText.text = $"Empty in: {FormatTime(timeUntilEmpty, false)}";
+                    timeRemaining = (capacity - amount) / productionRate;
+                    resourceUI.UpdateTimeDisplay(timeRemaining, true);
                 }
                 else
                 {
-                    resourceUI.TimeUntilFullText.text = "";
+                    timeRemaining = amount / -productionRate;
+                    resourceUI.UpdateTimeDisplay(timeRemaining, false);
                 }
             }
             else
             {
-                resourceUI.TimeUntilFullText.text = "";
+                resourceUI.UpdateTimeDisplay(-1, false);
             }
         }
     }
 
-    private string FormatTime(float time, bool isPositive)
-    {
-        if (time <= 0) return "";
-        float absTime = Mathf.Abs(time);
-        TimeSpan t = TimeSpan.FromSeconds(absTime);
-        
-        if (absTime < 60) // Less than a minute
-            return $"{(int)absTime}s";
-        else if (absTime < 3600) // Less than an hour
-            return $"{t.Minutes:D2}m:{t.Seconds:D2}s";
-        else if (absTime < 86400) // Less than a day
-            return $"{t.Hours:D2}h:{t.Minutes:D2}m";
-        else // Days and hours
-            return $"{(int)t.TotalDays}d {t.Hours}h";
-    }
-    
     /// <summary>
     /// Calculate the net production rate for a resource (for display)
     /// </summary>
@@ -387,14 +365,7 @@ public class UIManager : MonoBehaviour
     /// </summary>
     private string GetBuildingCostString(List<ResourceAmount> cost)
     {
-        string costText = "Cost:";
-        foreach (var costItem in cost)
-        {
-            ResourceDefinition resource = GameManager.Instance.Resources.GetResourceDefinition(costItem.ResourceID);
-            string resourceName = resource != null ? resource.DisplayName : costItem.ResourceID;
-            costText += $"\n{resourceName}: {costItem.Amount}";
-        }
-        return costText;
+        return DataFormatter.GetCostString(cost);
     }
     
     #endregion
@@ -500,14 +471,7 @@ public class UIManager : MonoBehaviour
     /// <returns></returns>
     private string GetUpgradeCostString(List<ResourceAmount> cost)
     {
-        string costText = "Cost:";
-        foreach (var costItem in cost)
-        {
-            ResourceDefinition resource = GameManager.Instance.Resources.GetResourceDefinition(costItem.ResourceID);
-            string resourceName = resource != null ? resource.DisplayName : costItem.ResourceID;
-            costText += $"\n{resourceName}: {costItem.Amount}";
-        }
-        return costText;
+        return DataFormatter.GetCostString(cost);
     }
     
     #endregion
@@ -520,18 +484,19 @@ public class UIManager : MonoBehaviour
     public void ShowTooltip(string targetID, UIType type, string message = null)
     {
         tooltipPanel.SetActive(true);
-        string costText = "Cost:";
         
         switch (type)
         {
             case UIType.Building:
-                    BuildingDefinition buildingDef = GameManager.Instance.Buildings.GetBuildingDefinition(targetID);
-                    if (buildingDef != null)
-                    {
-                        var currentCost = GameManager.Instance.Buildings.CalculateBuildingCost(targetID);
-                        tooltipTitle.text = buildingDef.DisplayName;
-                        tooltipDescription.text = buildingDef.Description;
+                BuildingDefinition buildingDef = GameManager.Instance.Buildings.GetBuildingDefinition(targetID);
+                if (buildingDef != null)
+                {
+                    var currentCost = GameManager.Instance.Buildings.CalculateBuildingCost(targetID);
+                    tooltipTitle.text = buildingDef.DisplayName;
+                    tooltipDescription.text = buildingDef.Description;
                     
+                    // Format costs with affordable/unaffordable colors
+                    List<ResourceAmount> costList = new List<ResourceAmount>();
                     foreach (var costItem in currentCost)
                     {
                         bool canAfford = GameManager.Instance.Resources.GetAmount(costItem.Key) >= costItem.Value;
@@ -541,18 +506,23 @@ public class UIManager : MonoBehaviour
                             .Find(r => r.Definition.ID == costItem.Key)?.Definition;
                         string resourceName = resource != null ? resource.DisplayName : costItem.Key;
                         
-                        costText += $"\n{colorTag}{resourceName}: {costItem.Value}</color>";
+                        tooltipCost.text += $"\n{colorTag}{resourceName}: {costItem.Value}</color>";
                     }
-                    tooltipCost.text = costText;
+                    
+                    tooltipCost.text = "Cost:" + tooltipCost.text;
                     tooltipEffects.text = GetBuildingEffectsString(buildingDef);
                 }
                 break;
+                
             case UIType.Upgrade:
-                    UpgradeDefinition upgradeDef = GameManager.Instance.Upgrades.GetUpgradeDefinition(targetID);
-                    if (upgradeDef != null)
-                    {
-                        tooltipTitle.text = upgradeDef.DisplayName;
-                        tooltipDescription.text = upgradeDef.Description;
+                UpgradeDefinition upgradeDef = GameManager.Instance.Upgrades.GetUpgradeDefinition(targetID);
+                if (upgradeDef != null)
+                {
+                    tooltipTitle.text = upgradeDef.DisplayName;
+                    tooltipDescription.text = upgradeDef.Description;
+                    
+                    // Format costs with colored text based on affordability
+                    tooltipCost.text = "Cost:";
                     foreach (var costItem in upgradeDef.Cost)
                     {
                         bool canAfford = GameManager.Instance.Resources.GetAmount(costItem.ResourceID) >= costItem.Amount;
@@ -562,12 +532,14 @@ public class UIManager : MonoBehaviour
                             .Find(r => r.Definition.ID == costItem.ResourceID)?.Definition;
                         string resourceName = resource != null ? resource.DisplayName : costItem.ResourceID;
                         
-                        costText += $"\n{colorTag}{resourceName}: {costItem.Amount}</color>";
+                        tooltipCost.text += $"\n{colorTag}{resourceName}: {costItem.Amount}</color>";
                     }
-                    tooltipCost.text = costText;
-                    tooltipEffects.text = GetUpgradeEffectsString(upgradeDef);
+                    
+                    // Use DataFormatter for upgrade effects
+                    tooltipEffects.text = DataFormatter.GetEffectsString(upgradeDef.Effects);
                 }
                 break;
+                
             default:
                 tooltipTitle.text = "Error";
                 tooltipDescription.text = "Invalid tooltip type.";
@@ -615,7 +587,6 @@ public class UIManager : MonoBehaviour
             tooltipRect.pivot.y == 1 ? -10 : 10
         );
         tooltipPanel.transform.position = mousePos + offset;
-
     }
     
     /// <summary>
@@ -668,65 +639,7 @@ public class UIManager : MonoBehaviour
     /// </summary>
     private string GetUpgradeEffectsString(UpgradeDefinition upgrade)
     {
-        string effectsText = "Effects:";
-        foreach (var effect in upgrade.Effects)
-        {
-            switch (effect.Type)
-            {
-                case EffectType.ProductionMultiplier:
-                    ResourceDefinition prodResource = GameManager.Instance.Resources.GetVisibleResources()
-                        .Find(r => r.Definition.ID == effect.TargetID)?.Definition;
-                    string prodResourceName = prodResource != null ? prodResource.DisplayName : effect.TargetID;
-                    effectsText += $"\n+{(effect.Value - 1) * 100:F0}% {prodResourceName} production";
-                    break;
-                case EffectType.BuildingProductionMultiplier:
-                    BuildingDefinition buildingDef = GameManager.Instance.Buildings.GetBuildingDefinition(effect.TargetID);
-                    string buildingName = buildingDef != null ? buildingDef.DisplayName : effect.TargetID;
-                    effectsText += $"\n+{(effect.Value - 1) * 100:F0}% {buildingName} production";
-                    break;
-                case EffectType.ResourceCapacityMultiplier:
-                    ResourceDefinition capResource = GameManager.Instance.Resources.GetVisibleResources()
-                       .Find(r => r.Definition.ID == effect.TargetID)?.Definition;
-                    string capResourceName = capResource != null ? capResource.DisplayName : effect.TargetID;
-                    effectsText += $"\n+{(effect.Value - 1) * 100:F0}% {capResourceName} capacity";
-                    break;
-                case EffectType.StorageMultiplier:
-                    ResourceDefinition storageResource = GameManager.Instance.Resources.GetVisibleResources()
-                       .Find(r => r.Definition.ID == effect.TargetID)?.Definition;
-                    string storageResourceName = storageResource != null ? storageResource.DisplayName : effect.TargetID;
-                    effectsText += $"\n+{(effect.Value - 1) * 100:F0}% {storageResourceName} storage";
-                    break;
-                case EffectType.ConsumptionReduction:
-                    ResourceDefinition consumptionResource = GameManager.Instance.Resources.GetVisibleResources()
-                       .Find(r => r.Definition.ID == effect.TargetID)?.Definition;
-                    string consumptionResourceName = consumptionResource != null ? consumptionResource.DisplayName : effect.TargetID;
-                    effectsText += $"\n-{(1 - effect.Value) * 100:F0}% {consumptionResourceName} consumption";
-                    break;
-                case EffectType.UnlockBuilding:
-                    BuildingDefinition unlockBuildingDef = GameManager.Instance.Buildings.GetBuildingDefinition(effect.TargetID);
-                    string unlockBuildingName = unlockBuildingDef != null ? unlockBuildingDef.DisplayName: effect.TargetID;
-                    effectsText += $"\nUnlocks {unlockBuildingName}";
-                    break;
-                case EffectType.UnlockUpgrade:
-                    UpgradeDefinition unlockUpgradeDef = GameManager.Instance.Upgrades.GetUpgradeDefinition(effect.TargetID);
-                    string unlockUpgradeName = unlockUpgradeDef != null ? unlockUpgradeDef.DisplayName : effect.TargetID;
-                    effectsText += $"\nUnlocks {unlockUpgradeName}";
-                    break;
-                case EffectType.UnlockResource:
-                    ResourceDefinition unlockResource = GameManager.Instance.Resources.GetResourceDefinition(effect.TargetID);
-                    string unlockResourceName = unlockResource != null ? unlockResource.DisplayName : effect.TargetID;
-                    effectsText += $"\nUnlocks {unlockResourceName}";
-                    break;
-                default:
-                    effectsText += $"\nUnknown effect type: {effect.Type}";
-                    break;
-            }
-        }
-        if (effectsText == "Effects:")
-        {
-            effectsText = "Effects:\nNone";
-        }
-        return effectsText;
+        return DataFormatter.GetEffectsString(upgrade.Effects);
     }
 
     private void CheckForHover()

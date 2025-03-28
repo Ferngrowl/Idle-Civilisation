@@ -20,12 +20,7 @@ public class BuildingUI : MonoBehaviour
             return;
         }
 
-        string costString = "";
-        for (int i = 0; i < cost.Count; i++)
-        {
-            if (i > 0) costString += "\n";
-            costString += $"{cost[i].Amount} {cost[i].ResourceID}";
-        }
-        CostText.text = costString;
+        // Use the DataFormatter utility to format the cost string
+        CostText.text = DataFormatter.GetCostString(cost).Replace("Cost:", "");
     }
 }
