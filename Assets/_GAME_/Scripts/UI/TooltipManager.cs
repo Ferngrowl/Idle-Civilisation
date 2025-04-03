@@ -5,163 +5,298 @@ using TMPro;
 using UnityEngine.EventSystems;
 
 /// <summary>
-/// Manages tooltip display and behavior across the game UI
+/// Manages global tooltip system for the game
 /// </summary>
 public class TooltipManager : MonoBehaviour
 {
-    [Header("Tooltip UI References")]
+    [Header("Tooltip Components")]
     [SerializeField] private GameObject tooltipPanel;
-    [SerializeField] private Text tooltipTitle;
-    [SerializeField] private Text tooltipDescription;
-    [SerializeField] private Text tooltipCost;
-    [SerializeField] private Text tooltipEffects;
+    [SerializeField] private TMP_Text tooltipTitle;
+    [SerializeField] private TMP_Text tooltipDescription;
+    [SerializeField] private TMP_Text tooltipCost;
+    [SerializeField] private TMP_Text tooltipEffects;
     
-    [Header("Tooltip Configuration")]
+    [Header("Visual Settings")]
     [SerializeField] private float edgePadding = 10f;
-    [SerializeField] private Vector2 cursorOffset = new Vector2(15f, 15f);
+    [SerializeField] private Vector2 cursorOffset = new Vector2(15, -15);
     
-    private Canvas parentCanvas;
-    private RectTransform tooltipRect;
+    // State tracking
+    private bool isTooltipActive = false;
     
     /// <summary>
-    /// Enum for UI element types that can have tooltips
+    /// Tooltip UI element types
     /// </summary>
-    public enum UIType
+    public enum UIType 
     {
         Building,
         Upgrade,
-        Resource,
-        Other
+        Resource
     }
     
+    #region Unity Lifecycle
+    
+    // For position stability
+    private Vector2 lastMousePosition;
+    private bool allowPositionUpdate = true;
+
     private void Awake()
     {
-        // Initialize references if needed
-        parentCanvas = GetComponentInParent<Canvas>();
-        tooltipRect = tooltipPanel.GetComponent<RectTransform>();
-        
-        // Hide tooltip initially
+        // Ensure tooltip is hidden at start
         HideTooltip();
+        lastMousePosition = Input.mousePosition;
     }
     
     private void Update()
     {
-        // Position tooltip at mouse if visible
-        if (tooltipPanel.activeSelf)
+        // Update tooltip position if active, but add stabilization
+        if (isTooltipActive && tooltipPanel && tooltipPanel.activeSelf)
         {
-            PositionTooltipAtMouse();
-        }
-        
-        // Optional: Check for UI elements under cursor that need tooltips
-        // CheckForHover();
-    }
-    
-    /// <summary>
-    /// Shows the tooltip with the appropriate content based on target type
-    /// </summary>
-    /// <param name="targetID">ID of the target building, upgrade, etc.</param>
-    /// <param name="type">Type of UI element</param>
-    /// <param name="message">Optional custom message to display instead</param>
-    public void ShowTooltip(string targetID, UIType type, string message = null)
-    {
-        // Use custom message if provided
-        if (!string.IsNullOrEmpty(message))
-        {
-            tooltipTitle.text = "Info";
-            tooltipDescription.text = message;
-            tooltipCost.text = string.Empty;
-            tooltipEffects.text = string.Empty;
-        }
-        else
-        {
-            // Otherwise, fill based on type
-            switch (type)
+            // Check if mouse has moved significantly
+            if (Vector2.Distance(lastMousePosition, Input.mousePosition) > 3f)
             {
-                case UIType.Building:
-                    // TODO: Implement building tooltip content
-                    break;
-                    
-                case UIType.Upgrade:
-                    // TODO: Implement upgrade tooltip content
-                    break;
-                    
-                case UIType.Resource:
-                    // TODO: Implement resource tooltip content
-                    break;
-                    
-                case UIType.Other:
-                default:
-                    // Generic tooltip
-                    tooltipTitle.text = "Info";
-                    tooltipDescription.text = "No information available.";
-                    tooltipCost.text = string.Empty;
-                    tooltipEffects.text = string.Empty;
-                    break;
+                allowPositionUpdate = true;
+                lastMousePosition = Input.mousePosition;
+            }
+            
+            // Only update position when needed to reduce flickering
+            if (allowPositionUpdate)
+            {
+                PositionTooltipAtMouse();
+                allowPositionUpdate = false;
             }
         }
-        
-        // Show tooltip and position it
-        tooltipPanel.SetActive(true);
-        PositionTooltipAtMouse();
     }
     
+    #endregion
+    
+    #region Public API
+    
+    // Add debouncing to prevent rapid show/hide cycles
+    private float lastActivationTime = 0f;
+    private const float ACTIVATION_DEBOUNCE = 0.1f;
+
     /// <summary>
-    /// Positions the tooltip next to the mouse cursor, ensuring it stays within screen bounds
+    /// Shows tooltip with specified content
     /// </summary>
-    private void PositionTooltipAtMouse()
+    /// <param name="targetID">ID of building/upgrade/resource</param>
+    /// <param name="type">Type of UI element</param>
+    /// <param name="message">Optional override message</param>
+    public void ShowTooltip(string targetID, UIType type, string message = null)
     {
-        // Get mouse position
-        Vector2 mousePos = Input.mousePosition;
+        // Debounce rapid show/hide cycles
+        if (Time.unscaledTime - lastActivationTime < ACTIVATION_DEBOUNCE)
+            return;
         
-        // Convert to canvas space if needed
-        if (parentCanvas.renderMode == RenderMode.ScreenSpaceCamera || 
-            parentCanvas.renderMode == RenderMode.WorldSpace)
+        lastActivationTime = Time.unscaledTime;
+        
+        // Clear and activate tooltip
+        ClearTooltipContent();
+        ActivateTooltip();
+        
+        // Set content based on type or message
+        if (!string.IsNullOrEmpty(message))
         {
-            RectTransformUtility.ScreenPointToLocalPointInRectangle(
-                parentCanvas.transform as RectTransform,
-                mousePos, parentCanvas.worldCamera, 
-                out Vector2 localPos);
-                
-            tooltipRect.localPosition = localPos + cursorOffset;
+            SetSimpleTooltipContent("Info", message);
         }
         else
         {
-            tooltipRect.position = mousePos + cursorOffset;
-        }
-        
-        // Ensure tooltip stays within screen bounds
-        Vector3[] corners = new Vector3[4];
-        tooltipRect.GetWorldCorners(corners);
-        
-        // Check right edge
-        float rightEdgeDistance = Screen.width - corners[2].x;
-        if (rightEdgeDistance < edgePadding)
-        {
-            tooltipRect.position += new Vector3(rightEdgeDistance - edgePadding, 0, 0);
-        }
-        
-        // Check bottom edge
-        float bottomEdgeDistance = corners[0].y;
-        if (bottomEdgeDistance < edgePadding)
-        {
-            tooltipRect.position += new Vector3(0, edgePadding - bottomEdgeDistance, 0);
-        }
-        
-        // Check top edge
-        float topEdgeDistance = Screen.height - corners[1].y;
-        if (topEdgeDistance < edgePadding)
-        {
-            tooltipRect.position += new Vector3(0, topEdgeDistance - edgePadding, 0);
+            // Get content from appropriate manager
+            UIManager uiManager = GameManager.Instance.UI;
+            uiManager.ShowTooltip(targetID, (global::UIType)type);
         }
     }
     
     /// <summary>
     /// Hides the tooltip
     /// </summary>
-    public void HideTooltip()
+    public void HideTooltip(bool immediate = true)
     {
-        tooltipPanel.SetActive(false);
+        // Debounce rapid show/hide cycles
+        if (Time.unscaledTime - lastActivationTime < ACTIVATION_DEBOUNCE)
+            return;
+        
+        lastActivationTime = Time.unscaledTime;
+        
+        if (immediate)
+            DeactivateTooltip();
+        else
+            ClearTooltipContent();
+            
+        isTooltipActive = false;
     }
+    
+    /// <summary>
+    /// Returns whether tooltip is currently shown
+    /// </summary>
+    public bool IsTooltipActive()
+    {
+        return isTooltipActive;
+    }
+    
+    #endregion
+    
+    #region Internal Methods
+    
+    /// <summary>
+    /// Activates tooltip panel
+    /// </summary>
+    private void ActivateTooltip()
+    {
+        if (tooltipPanel)
+        {
+            tooltipPanel.SetActive(true);
+            isTooltipActive = true;
+            FormatTooltip();
+            PositionTooltipAtMouse();
+        }
+    }
+    
+    /// <summary>
+    /// Deactivates tooltip panel
+    /// </summary>
+    private void DeactivateTooltip()
+    {
+        if (tooltipPanel)
+            tooltipPanel.SetActive(false);
+            
+        isTooltipActive = false;
+    }
+    
+    /// <summary>
+    /// Clears all tooltip text fields
+    /// </summary>
+    private void ClearTooltipContent()
+    {
+        if (tooltipTitle)
+            tooltipTitle.text = string.Empty;
+            
+        if (tooltipDescription)
+            tooltipDescription.text = string.Empty;
+            
+        if (tooltipCost)
+            tooltipCost.text = string.Empty;
+            
+        if (tooltipEffects)
+            tooltipEffects.text = string.Empty;
+    }
+    
+    /// <summary>
+    /// Sets basic tooltip content
+    /// </summary>
+    private void SetSimpleTooltipContent(string title, string description)
+    {
+        if (tooltipTitle)
+            tooltipTitle.text = title;
+            
+        if (tooltipDescription)
+            tooltipDescription.text = description;
+    }
+    
+    /// <summary>
+    /// Formats tooltip text for display
+    /// </summary>
+    private void FormatTooltip()
+    {
+        // Enable text wrapping
+        EnableTextWrapping();
+        
+        // Ensure tooltip has a dark background for better text visibility
+        EnsureTooltipBackground();
+        
+        // Update layout
+        if (tooltipPanel)
+        {
+            Canvas.ForceUpdateCanvases();
+            LayoutRebuilder.ForceRebuildLayoutImmediate(tooltipPanel.GetComponent<RectTransform>());
+        }
+    }
+    
+    /// <summary>
+    /// Ensures tooltip has a proper background for text visibility
+    /// </summary>
+    private void EnsureTooltipBackground()
+    {
+        if (!tooltipPanel) return;
+        
+        // Set minimum size
+        LayoutElement layout = tooltipPanel.GetComponent<LayoutElement>();
+        if (layout == null)
+            layout = tooltipPanel.AddComponent<LayoutElement>();
+        
+        layout.minWidth = 200;
+        layout.minHeight = 100;
+        
+        // Add dark background
+        Image background = tooltipPanel.GetComponent<Image>();
+        if (background == null)
+            background = tooltipPanel.AddComponent<Image>();
+        
+        // Dark grey semi-transparent for better readability
+        background.color = new Color(0.2f, 0.2f, 0.2f, 0.9f);
+    }
+    
+    /// <summary>
+    /// Enables text wrapping on all tooltip text components
+    /// </summary>
+    private void EnableTextWrapping()
+    {
+        if (tooltipDescription is TMP_Text tmpDesc)
+            tmpDesc.enableWordWrapping = true;
+            
+        if (tooltipEffects is TMP_Text tmpEffects)
+            tmpEffects.enableWordWrapping = true;
+            
+        if (tooltipCost is TMP_Text tmpCost)
+            tmpCost.enableWordWrapping = true;
+    }
+    
+    /// <summary>
+    /// Positions tooltip at mouse cursor with screen bounds checking
+    /// </summary>
+    private void PositionTooltipAtMouse()
+    {
+        if (!tooltipPanel)
+            return;
+            
+        RectTransform tooltipRect = tooltipPanel.GetComponent<RectTransform>();
+        if (!tooltipRect)
+            return;
+        
+        // Get dimensions and position
+        Vector2 tooltipSize = tooltipRect.sizeDelta;
+        Vector2 mousePos = Input.mousePosition;
+        Vector2 position = mousePos + cursorOffset;
+        
+        // Adjust for screen edges
+        AdjustPositionForScreenBounds(ref position, mousePos, tooltipSize);
+        
+        // Apply position
+        tooltipRect.position = position;
+    }
+    
+    /// <summary>
+    /// Adjusts position to stay within screen bounds
+    /// </summary>
+    private void AdjustPositionForScreenBounds(ref Vector2 position, Vector2 mousePos, Vector2 tooltipSize)
+    {
+        // Right edge
+        if (position.x + tooltipSize.x > Screen.width - edgePadding)
+            position.x = mousePos.x - tooltipSize.x - cursorOffset.x;
+        
+        // Bottom edge
+        if (position.y + tooltipSize.y > Screen.height - edgePadding)
+            position.y = mousePos.y - tooltipSize.y - cursorOffset.y;
+        
+        // Left edge
+        if (position.x < edgePadding)
+            position.x = edgePadding;
+        
+        // Top edge
+        if (position.y < edgePadding)
+            position.y = edgePadding;
+    }
+    
+    #endregion
     
     /// <summary>
     /// Get formatted string of building effects for display
@@ -189,13 +324,5 @@ public class TooltipManager : MonoBehaviour
         // TODO: Implement upgrade effects formatting
         
         return effects;
-    }
-    
-    /// <summary>
-    /// Check for UI elements under cursor that require tooltips
-    /// </summary>
-    private void CheckForHover()
-    {
-        // TODO: Implement hover detection for tooltips
     }
 } 
