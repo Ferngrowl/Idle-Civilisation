@@ -22,6 +22,7 @@ public class TooltipManager : MonoBehaviour
     
     // State tracking
     private bool isTooltipActive = false;
+    private IUIManager uiManager;
     
     /// <summary>
     /// Tooltip UI element types
@@ -44,6 +45,9 @@ public class TooltipManager : MonoBehaviour
         // Ensure tooltip is hidden at start
         HideTooltip();
         lastMousePosition = Input.mousePosition;
+        
+        // Get dependencies 
+        uiManager = ServiceLocator.Get<IUIManager>();
     }
     
     private void Update()
@@ -101,8 +105,10 @@ public class TooltipManager : MonoBehaviour
         else
         {
             // Get content from appropriate manager
-            UIManager uiManager = GameManager.Instance.UI;
-            uiManager.ShowTooltip(targetID, (global::UIType)type);
+            if (uiManager != null)
+            {
+                uiManager.ShowTooltip(targetID, (global::UIType)type);
+            }
         }
     }
     

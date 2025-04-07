@@ -2,20 +2,67 @@ using System;
 using System.Collections.Generic;
 using UnityEngine;
 using System.Linq;
+using Game.Interfaces;
+using Game.Models;
+using Serialization;
+using GameConfiguration;
 
 /// <summary>
 /// Manages all buildings in the game. Handles construction, upgrades, and production.
 /// </summary>
-public class BuildingManager : MonoBehaviour
+public class BuildingManager : MonoBehaviour, IBuildingManager
 {
-
     [SerializeField] private List<BuildingDefinition> buildingDefinitions = new List<BuildingDefinition>();
     
     // Runtime building data
     private Dictionary<string, Building> buildings = new Dictionary<string, Building>();
     
+    // Dependencies
+    private IResourceManager resourceManager;
+    private IUIManager uiManager;
+    
+    // Dictionary to cache converted BuildingDefinitions by ID
+    private Dictionary<string, GameConfiguration.BuildingDefinition> cachedBuildingDefinitions = 
+        new Dictionary<string, GameConfiguration.BuildingDefinition>();
+    
+    // Get a building definition from GameConfiguration namespace by ID
+    private GameConfiguration.BuildingDefinition GetConfigBuildingDefinition(string id)
+    {
+        // Return from cache if available
+        if (cachedBuildingDefinitions.ContainsKey(id))
+        {
+            return cachedBuildingDefinitions[id];
+        }
+        
+        // Find the original definition
+        var originalDef = buildingDefinitions.Find(def => def.ID == id);
+        if (originalDef == null) 
+        {
+            return null;
+        }
+        
+        // Create a new instance with the same properties for type compatibility
+        // This is a workaround for the namespace ambiguity issues
+        var configDef = new GameConfiguration.BuildingDefinition 
+        {
+            ID = originalDef.ID,
+            DisplayName = originalDef.DisplayName,
+            Description = originalDef.Description,
+            Icon = originalDef.Icon
+            // Copy other properties as needed
+        };
+        
+        // Cache it for future use
+        cachedBuildingDefinitions[id] = configDef;
+        return configDef;
+    }
+    
     public void Initialize()
     {
+        // Get dependencies
+        resourceManager = ServiceLocator.Get<IResourceManager>();
+        uiManager = ServiceLocator.Get<IUIManager>();
+        
         // Initialize all buildings from definitions
         foreach (var definition in buildingDefinitions)
         {
@@ -26,11 +73,6 @@ public class BuildingManager : MonoBehaviour
         SetupBuildingVisibility();
     }
     
-    public BuildingDefinition GetBuildingDefinition(string buildingID) {
-    // Example: Retrieve from a predefined list or dictionary
-    return buildingDefinitions.Find(def => def.ID == buildingID);
-    }
-    
     /// <summary>
     /// Setup advanced visibility conditions for buildings
     /// </summary>
@@ -38,17 +80,18 @@ public class BuildingManager : MonoBehaviour
     {
         foreach (var building in buildings.Values)
         {
-            if (building.Definition.VisibilityRequirements != null && building.Definition.VisibilityRequirements.Count > 0)
+            // Set visibility function based on required buildings
+            if (building.Definition.RequiredBuildings != null && building.Definition.RequiredBuildings.Count > 0)
             {
                 building.VisibilityCondition = () => 
-                    building.Definition.VisibilityRequirements.All(req =>
-                        GetBuildingCount(req.RequiredBuildingID) >= req.RequiredCount
+                    building.Definition.RequiredBuildings.All(reqBuildingId =>
+                        GetBuildingCount(reqBuildingId) > 0
                     );
             }
         }
     }
     
-    public void Tick(float deltaTime)
+    public void Tick(long tickNumber)
     {
         // Update buildings if needed (e.g., construction progress)
         foreach (var building in buildings.Values)
@@ -68,7 +111,7 @@ public class BuildingManager : MonoBehaviour
     /// </summary>
     private void UpdateResourceCapacities()
     {
-        ResourceManager resourceManager = GameManager.Instance.Resources;
+        if (resourceManager == null) return;
         
         // Reset capacities
         Dictionary<string, float> capacities = new Dictionary<string, float>();
@@ -109,51 +152,34 @@ public class BuildingManager : MonoBehaviour
             return false;
             
         // Calculate current cost
-        Dictionary<string, float> currentCost = CalculateBuildingCost(buildingID);
+        Dictionary<string, float> currentCost = building.GetCurrentCost();
         
         // Check if we can afford it
-        return GameManager.Instance.Resources.CanAfford(currentCost);
+        return resourceManager != null && resourceManager.CanAfford(currentCost);
     }
     
-    public void ConstructBuilding(string buildingID)
+    public bool ConstructBuilding(string buildingID)
     {
         if (!CanConstructBuilding(buildingID))
-            return;
+            return false;
             
         // Calculate current cost
-        Dictionary<string, float> currentCost = CalculateBuildingCost(buildingID);
+        Dictionary<string, float> currentCost = buildings[buildingID].GetCurrentCost();
         
         // Spend resources
-        GameManager.Instance.Resources.SpendResources(currentCost);
+        resourceManager.SpendResources(currentCost);
         
         // Increment building count
         buildings[buildingID].Count++;
         
         // Update UI
-        GameManager.Instance.UI.RefreshBuildingView();
+        if (uiManager != null)
+            uiManager.RefreshBuildingView();
         
         // Update resource capacities
         UpdateResourceCapacities();
-    }
-    
-    /// <summary>
-    /// Calculates the current cost of a building based on its base cost and scaling
-    /// </summary>
-    public Dictionary<string, float> CalculateBuildingCost(string buildingID)
-    {
-        if (!buildings.ContainsKey(buildingID))
-            return new Dictionary<string, float>();
-            
-        Building building = buildings[buildingID];
-        Dictionary<string, float> currentCost = new Dictionary<string, float>();
         
-        foreach (var cost in building.Definition.BaseCost)
-        {
-            float scaledCost = cost.Amount * Mathf.Pow(building.Definition.CostScaling, building.Count);
-            currentCost[cost.ResourceID] = Mathf.Ceil(scaledCost);
-        }
-        
-        return currentCost;
+        return true;
     }
     
     public int GetBuildingCount(string buildingID)
@@ -194,60 +220,90 @@ public class BuildingManager : MonoBehaviour
         return new List<Building>(buildings.Values);
     }
     
-    public void UnlockBuilding(string buildingID)
+    private void UnlockBuilding(string buildingID)
     {
         if (buildings.ContainsKey(buildingID))
         {
             buildings[buildingID].IsUnlocked = true;
             
             // Notify UI system
-            GameManager.Instance.UI.RefreshBuildingView();
+            if (uiManager != null)
+                uiManager.RefreshBuildingView();
         }
     }
     
     public void Reset()
     {
         // Reset all buildings to initial state
-        foreach (var definition in buildingDefinitions)
+        foreach (var building in buildings.Values)
         {
-            buildings[definition.ID] = new Building(definition);
+            building.Reset();
         }
     }
     
-    public BuildingData SerializeData()
+    /// <summary>
+    /// Create serializable data for save game
+    /// </summary>
+    public BuildingSaveData SerializeData()
     {
-        BuildingData data = new BuildingData();
-        data.buildingStates = new List<BuildingState>();
+        BuildingSaveData data = new BuildingSaveData();
         
-        foreach (var building in buildings.Values)
+        foreach (var kvp in buildings)
         {
-            data.buildingStates.Add(new BuildingState
+            data.Buildings.Add(new BuildingSaveData.BuildingData
             {
-                id = building.Definition.ID,
-                count = building.Count,
-                isUnlocked = building.IsUnlocked
+                ID = kvp.Key,
+                Count = kvp.Value.Count,
+                IsUnlocked = kvp.Value.IsUnlocked
             });
         }
         
         return data;
     }
     
-    public void DeserializeData(BuildingData data)
+    /// <summary>
+    /// Load from serialized data
+    /// </summary>
+    public void DeserializeData(BuildingSaveData data)
     {
-        if (data == null || data.buildingStates == null)
+        if (data == null || data.Buildings == null)
             return;
             
-        foreach (var state in data.buildingStates)
+        // Reset all buildings first
+        foreach (var building in buildings.Values)
         {
-            if (buildings.ContainsKey(state.id))
+            building.Reset();
+        }
+        
+        // Apply saved values
+        foreach (var savedBuilding in data.Buildings)
+        {
+            if (buildings.ContainsKey(savedBuilding.ID))
             {
-                buildings[state.id].Count = state.count;
-                buildings[state.id].IsUnlocked = state.isUnlocked;
+                Building building = buildings[savedBuilding.ID];
+                building.Count = savedBuilding.Count;
+                building.IsUnlocked = savedBuilding.IsUnlocked;
             }
         }
         
         // Update capacities after loading
         UpdateResourceCapacities();
+    }
+
+    public GameConfiguration.BuildingDefinition GetBuildingDefinition(string buildingID)
+    {
+        if (buildings.ContainsKey(buildingID))
+        {
+            return GetConfigBuildingDefinition(buildingID);
+        }
+        return null;
+    }
+
+    public Dictionary<string, float> CalculateBuildingCost(string buildingID)
+    {
+        if (buildings.ContainsKey(buildingID))
+            return buildings[buildingID].GetCurrentCost();
+        return new Dictionary<string, float>();
     }
 }
 
@@ -284,8 +340,9 @@ public class BuildingDefinition
     public List<BuildingVisibilityRequirement> VisibilityRequirements = new List<BuildingVisibilityRequirement>();
     
     public bool VisibleByDefault = false;
-}
 
+    public List<string> RequiredBuildings = new List<string>();
+}
 
 /// <summary>
 /// Runtime instance of a building
@@ -307,6 +364,25 @@ public class Building
         Count = 0;
         IsUnlocked = definition.VisibleByDefault;
     }
+
+    public Dictionary<string, float> GetCurrentCost()
+    {
+        Dictionary<string, float> currentCost = new Dictionary<string, float>();
+        
+        foreach (var cost in Definition.BaseCost)
+        {
+            float scaledCost = cost.Amount * Mathf.Pow(Definition.CostScaling, Count);
+            currentCost[cost.ResourceID] = Mathf.Ceil(scaledCost);
+        }
+        
+        return currentCost;
+    }
+
+    public void Reset()
+    {
+        Count = 0;
+        IsUnlocked = Definition.VisibleByDefault;
+    }
 }
 
 /// <summary>
@@ -323,18 +399,15 @@ public class ResourceAmount
 /// Serializable data for buildings
 /// </summary>
 [Serializable]
-public class BuildingData
+public class BuildingSaveData
 {
-    public List<BuildingState> buildingStates;
-}
+    public List<BuildingData> Buildings = new List<BuildingData>();
 
-/// <summary>
-/// Serializable state of a single building
-/// </summary>
-[Serializable]
-public class BuildingState
-{
-    public string id;
-    public int count;
-    public bool isUnlocked;
+    [Serializable]
+    public class BuildingData
+    {
+        public string ID;
+        public int Count;
+        public bool IsUnlocked;
+    }
 }

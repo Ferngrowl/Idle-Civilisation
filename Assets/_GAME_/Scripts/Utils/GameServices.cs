@@ -112,63 +112,6 @@ public class GameServices : MonoBehaviour
 }
 
 /// <summary>
-/// Interface for the Resource Manager service
-/// </summary>
-public interface IResourceManager
-{
-    float GetAmount(string resourceID);
-    float GetCapacity(string resourceID);
-    void AddResource(string resourceID, float amount);
-    bool CanAfford(Dictionary<string, float> costs);
-    void SpendResources(Dictionary<string, float> costs);
-    ResourceDefinition GetResourceDefinition(string id);
-    List<Resource> GetVisibleResources();
-    void UnlockResource(string resourceID);
-}
-
-/// <summary>
-/// Interface for the Building Manager service
-/// </summary>
-public interface IBuildingManager
-{
-    int GetBuildingCount(string buildingID);
-    Building GetBuilding(string buildingID);
-    BuildingDefinition GetBuildingDefinition(string buildingID);
-    List<Building> GetVisibleBuildings();
-    List<Building> GetAllBuildings();
-    bool CanConstructBuilding(string buildingID);
-    void ConstructBuilding(string buildingID);
-    Dictionary<string, float> CalculateBuildingCost(string buildingID);
-    void UnlockBuilding(string buildingID);
-}
-
-/// <summary>
-/// Interface for the Upgrade Manager service
-/// </summary>
-public interface IUpgradeManager
-{
-    bool IsUpgradePurchased(string upgradeID);
-    Upgrade GetUpgrade(string upgradeID);
-    UpgradeDefinition GetUpgradeDefinition(string upgradeID);
-    List<Upgrade> GetVisibleUpgrades();
-    List<Upgrade> GetAllPurchasedUpgrades();
-    bool CanPurchaseUpgrade(string upgradeID);
-    void PurchaseUpgrade(string upgradeID);
-    void UnlockUpgrade(string upgradeID);
-}
-
-/// <summary>
-/// Interface for the UI Manager service
-/// </summary>
-public interface IUIManager
-{
-    void RefreshResourceView();
-    void RefreshBuildingView();
-    void RefreshUpgradeView();
-    void ShowTab(UITab tab);
-}
-
-/// <summary>
 /// Extension methods to make accessing services more convenient
 /// </summary>
 public static class ServiceExtensions

@@ -1,37 +1,54 @@
 using System;
 using System.Collections.Generic;
 using UnityEngine;
+using Game.Interfaces;
+using Game.Models;
+using Serialization;
+using GameConfiguration;
 
 /// <summary>
 /// Manages all resources in the game. Handles production, consumption, and limits.
 /// </summary>
-public class ResourceManager : MonoBehaviour
+public class ResourceManager : MonoBehaviour, IResourceManager
 {
-    [SerializeField] private List<ResourceDefinition> resourceDefinitions = new List<ResourceDefinition>();
+    [SerializeField] private List<GameConfiguration.ResourceDefinition> resourceDefinitions = new List<GameConfiguration.ResourceDefinition>();
     
     // Runtime resource data
-    private Dictionary<string, Resource> resources = new Dictionary<string, Resource>();
+    private Dictionary<string, Game.Models.Resource> resources = new Dictionary<string, Game.Models.Resource>();
+    
+    // Dependencies
+    private IBuildingManager buildingManager;
+    private IUpgradeManager upgradeManager;
+    private ITimeManager timeManager;
     
     public float GetProductionRate(string resourceID) => CalculateProductionRate(resourceID);
     public float GetConsumptionRate(string resourceID) => CalculateConsumptionRate(resourceID);
 
-    public ResourceDefinition GetResourceDefinition(string id) 
-    => resourceDefinitions.Find(r => r.ID == id);
+    // Use the normal method with the correct return type
+    public GameConfiguration.ResourceDefinition GetResourceDefinition(string id)
+        => resourceDefinitions.Find(r => r.ID == id);
     
     public void Initialize()
     {
+        // Get dependencies from ServiceLocator
+        buildingManager = ServiceLocator.Get<IBuildingManager>();
+        upgradeManager = ServiceLocator.Get<IUpgradeManager>();
+        timeManager = ServiceLocator.Get<ITimeManager>();
+        
         // Initialize all resources from definitions
         foreach (var definition in resourceDefinitions)
         {
-            resources[definition.ID] = new Resource(definition);
+            resources[definition.ID] = new Game.Models.Resource(definition);
         }
         
         // Setup any initial resource states or custom visibility logic here if needed
     }
     
-    public void Tick(float deltaTime)
+    public void Tick(long tickNumber)
     {
-        // Calculate production for each resource
+        // Calculate production for each resource - process one tick's worth
+        float deltaTime = 0.2f; // 5 ticks per second = 0.2 seconds per tick
+        
         foreach (var resource in resources.Values)
         {
             if (resource.IsUnlocked)
@@ -39,6 +56,13 @@ public class ResourceManager : MonoBehaviour
                 // Calculate production rate (from buildings, etc.)
                 float productionRate = CalculateProductionRate(resource.Definition.ID);
                 float consumptionRate = CalculateConsumptionRate(resource.Definition.ID);
+                
+                // Apply seasonal effects if appropriate
+                if (timeManager != null)
+                {
+                    float seasonalModifier = timeManager.GetSeasonalModifier(resource.Definition.ID);
+                    productionRate *= seasonalModifier;
+                }
                 
                 // Apply net change
                 float netChange = (productionRate - consumptionRate) * deltaTime;
@@ -54,10 +78,11 @@ public class ResourceManager : MonoBehaviour
     {
         float baseProduction = 0f;
         
-        // Get base production from buildings
-        var buildings = GameManager.Instance.Buildings.GetAllBuildings();
-        foreach (var building in buildings)
+        // Add production from buildings
+        foreach (var building in buildingManager.GetAllBuildings())
         {
+            if (building.Count <= 0) continue;
+            
             foreach (var production in building.Definition.Production)
             {
                 if (production.ResourceID == resourceID)
@@ -67,8 +92,20 @@ public class ResourceManager : MonoBehaviour
             }
         }
         
-        // Apply production multipliers (from upgrades, etc.)
-        float multiplier = CalculateProductionMultiplier(resourceID);
+        // Apply upgrades
+        float multiplier = 1f;
+        foreach (var upgrade in upgradeManager.GetAllPurchasedUpgrades())
+        {
+            foreach (var effect in upgrade.Definition.Effects)
+            {
+                // Fully qualify the enum and properties with GameConfiguration namespace
+                if ((int)effect.Type == (int)GameConfiguration.EffectType.ProductionMultiplier && 
+                    effect.TargetID == resourceID)
+                {
+                    multiplier *= (1f + effect.Value);
+                }
+            }
+        }
         
         return baseProduction * multiplier;
     }
@@ -80,95 +117,41 @@ public class ResourceManager : MonoBehaviour
     {
         float baseConsumption = 0f;
         
-        // Get consumption from buildings
-        var buildings = GameManager.Instance.Buildings.GetAllBuildings();
-        foreach (var building in buildings)
+        // Add consumption from buildings
+        foreach (var building in buildingManager.GetAllBuildings())
         {
-            foreach (var consump in building.Definition.Consumption)
+            if (building.Count <= 0) continue;
+            
+            foreach (var consumption in building.Definition.Consumption)
             {
-                if (consump.ResourceID == resourceID)
+                if (consumption.ResourceID == resourceID)
                 {
-                    baseConsumption += consump.Amount * building.Count;
+                    baseConsumption += consumption.Amount * building.Count;
                 }
             }
         }
         
-        // Apply consumption reduction from upgrades
-        float multiplier = CalculateConsumptionReductionMultiplier(resourceID);
+        // Apply upgrades
+        float multiplier = 1f;
+        foreach (var upgrade in upgradeManager.GetAllPurchasedUpgrades())
+        {
+            foreach (var effect in upgrade.Definition.Effects)
+            {
+                // Fully qualify the enum and properties with GameConfiguration namespace
+                if ((int)effect.Type == (int)GameConfiguration.EffectType.ConsumptionMultiplier && 
+                    effect.TargetID == resourceID)
+                {
+                    multiplier *= (1f + effect.Value);
+                }
+            }
+        }
         
         return baseConsumption * multiplier;
     }
     
     /// <summary>
-    /// Calculates consumption reduction multiplier from upgrades
+    /// Get current amount of a resource
     /// </summary>
-    private float CalculateConsumptionReductionMultiplier(string resourceID)
-    {
-        float multiplier = 1f;
-        
-        // Apply multipliers from upgrades
-        if (GameManager.Instance.Upgrades != null)
-        {
-            var upgrades = GameManager.Instance.Upgrades.GetAllPurchasedUpgrades();
-            foreach (var upgrade in upgrades)
-            {
-                foreach (var effect in upgrade.Definition.Effects)
-                {
-                    if (effect.Type == EffectType.ConsumptionReduction && effect.TargetID == resourceID)
-                    {
-                        multiplier *= effect.Value; // Reduction value should be < 1.0
-                    }
-                }
-            }
-        }
-        
-        return multiplier;
-    }
-    
-    /// <summary>
-    /// Calculates production multiplier from all sources (upgrades, etc.)
-    /// </summary>
-    private float CalculateProductionMultiplier(string resourceID)
-    {
-        float multiplier = 1f;
-        
-        // Apply multipliers from upgrades
-        var upgrades = GameManager.Instance.Upgrades.GetAllPurchasedUpgrades();
-        foreach (var upgrade in upgrades)
-        {
-            foreach (var effect in upgrade.Definition.Effects)
-            {
-                if (effect.Type == EffectType.ProductionMultiplier && effect.TargetID == resourceID)
-                {
-                    multiplier *= effect.Value;
-                }
-            }
-        }
-        
-        return multiplier;
-    }
-    
-    public bool CanAfford(Dictionary<string, float> costs)
-    {
-        foreach (var cost in costs)
-        {
-            if (GetAmount(cost.Key) < cost.Value)
-                return false;
-        }
-        return true;
-    }
-    
-    public void SpendResources(Dictionary<string, float> costs)
-    {
-        if (!CanAfford(costs))
-            return;
-            
-        foreach (var cost in costs)
-        {
-            AddResource(cost.Key, -cost.Value);
-        }
-    }
-    
     public float GetAmount(string resourceID)
     {
         if (resources.ContainsKey(resourceID))
@@ -178,6 +161,9 @@ public class ResourceManager : MonoBehaviour
         return 0f;
     }
     
+    /// <summary>
+    /// Get current capacity of a resource
+    /// </summary>
     public float GetCapacity(string resourceID)
     {
         if (resources.ContainsKey(resourceID))
@@ -187,75 +173,74 @@ public class ResourceManager : MonoBehaviour
         return 0f;
     }
     
+    /// <summary>
+    /// Add an amount of a resource
+    /// </summary>
     public void AddResource(string resourceID, float amount)
     {
         if (resources.ContainsKey(resourceID))
         {
-            Resource resource = resources[resourceID];
+            Game.Models.Resource resource = resources[resourceID];
             
             // Check if adding would exceed capacity
             if (resource.Definition.HasCapacity)
             {
-                float newAmount = Mathf.Min(resource.Amount + amount, resource.Capacity);
-                resource.Amount = Mathf.Max(0, newAmount);
+                resource.Amount = Mathf.Clamp(resource.Amount + amount, 0f, resource.Capacity);
             }
             else
             {
-                resource.Amount += amount;
-            }
-            
-            // Resource was collected, mark as unlocked
-            if (amount > 0 && !resource.IsUnlocked)
-            {
-                UnlockResource(resourceID);
-            }
-        }
-    }
-    
-    public void SetCapacity(string resourceID, float capacity)
-    {
-        if (resources.ContainsKey(resourceID))
-        {
-            // Apply any storage multipliers from upgrades
-            float multiplier = CalculateStorageMultiplier(resourceID);
-            resources[resourceID].Capacity = capacity * multiplier;
-            
-            // Cap current amount if it exceeds new capacity
-            if (resources[resourceID].Amount > resources[resourceID].Capacity)
-            {
-                resources[resourceID].Amount = resources[resourceID].Capacity;
+                resource.Amount = Mathf.Max(0f, resource.Amount + amount);
             }
         }
     }
     
     /// <summary>
-    /// Calculates storage multiplier from upgrades
+    /// Set the capacity of a resource
     /// </summary>
-    private float CalculateStorageMultiplier(string resourceID)
+    public void SetCapacity(string resourceID, float capacity)
     {
-        float multiplier = 1f;
-        
-        // Apply multipliers from upgrades
-        if (GameManager.Instance.Upgrades != null)
+        if (resources.ContainsKey(resourceID))
         {
-            var upgrades = GameManager.Instance.Upgrades.GetAllPurchasedUpgrades();
-            foreach (var upgrade in upgrades)
+            Game.Models.Resource resource = resources[resourceID];
+            resource.Capacity = Mathf.Max(0f, capacity);
+            
+            // Clamp amount if it now exceeds new capacity
+            if (resource.Amount > resource.Capacity)
             {
-                foreach (var effect in upgrade.Definition.Effects)
-                {
-                    if ((effect.Type == EffectType.StorageMultiplier || 
-                         effect.Type == EffectType.ResourceCapacityMultiplier) && 
-                        effect.TargetID == resourceID)
-                    {
-                        multiplier *= effect.Value;
-                    }
-                }
+                resource.Amount = resource.Capacity;
             }
         }
-        
-        return multiplier;
     }
     
+    /// <summary>
+    /// Check if player can afford a cost
+    /// </summary>
+    public bool CanAfford(Dictionary<string, float> costs)
+    {
+        foreach (var cost in costs)
+        {
+            if (GetAmount(cost.Key) < cost.Value)
+            {
+                return false;
+            }
+        }
+        return true;
+    }
+    
+    /// <summary>
+    /// Spend resources (after checking CanAfford)
+    /// </summary>
+    public void SpendResources(Dictionary<string, float> costs)
+    {
+        foreach (var cost in costs)
+        {
+            AddResource(cost.Key, -cost.Value);
+        }
+    }
+    
+    /// <summary>
+    /// Unlock a resource for the player to see
+    /// </summary>
     public void UnlockResource(string resourceID)
     {
         if (resources.ContainsKey(resourceID))
@@ -263,17 +248,79 @@ public class ResourceManager : MonoBehaviour
             resources[resourceID].IsUnlocked = true;
             
             // Notify UI system about resource visibility change
-            GameManager.Instance.UI.RefreshResourceView();
+            ServiceLocator.Get<IUIManager>().RefreshResourceView();
         }
     }
     
-    public List<Resource> GetVisibleResources()
+    /// <summary>
+    /// Create serializable data for save game
+    /// </summary>
+    public ResourceSaveData SerializeData()
     {
-        List<Resource> visibleResources = new List<Resource>();
+        ResourceSaveData data = new ResourceSaveData();
+        
+        foreach (var kvp in resources)
+        {
+            data.Resources.Add(new ResourceSaveData.ResourceData
+            {
+                ID = kvp.Key,
+                Amount = kvp.Value.Amount,
+                Capacity = kvp.Value.Capacity,
+                IsUnlocked = kvp.Value.IsUnlocked
+            });
+        }
+        
+        return data;
+    }
+    
+    /// <summary>
+    /// Load from serialized data
+    /// </summary>
+    public void DeserializeData(ResourceSaveData data)
+    {
+        if (data == null || data.Resources == null)
+            return;
+            
+        // Reset all resources first
+        foreach (var resource in resources.Values)
+        {
+            resource.Reset();
+        }
+        
+        // Apply saved values
+        foreach (var savedResource in data.Resources)
+        {
+            if (resources.ContainsKey(savedResource.ID))
+            {
+                Game.Models.Resource resource = resources[savedResource.ID];
+                resource.Amount = savedResource.Amount;
+                resource.Capacity = savedResource.Capacity;
+                resource.IsUnlocked = savedResource.IsUnlocked;
+            }
+        }
+    }
+    
+    /// <summary>
+    /// Reset all resources to initial state
+    /// </summary>
+    public void Reset()
+    {
+        foreach (var resource in resources.Values)
+        {
+            resource.Reset();
+        }
+    }
+    
+    /// <summary>
+    /// Returns a list of resources that are currently visible to the player
+    /// </summary>
+    public List<Game.Models.Resource> GetVisibleResources()
+    {
+        List<Game.Models.Resource> visibleResources = new List<Game.Models.Resource>();
         
         foreach (var resource in resources.Values)
         {
-            if (resource.IsVisible && resource.IsUnlocked)
+            if (resource.IsVisible)
             {
                 visibleResources.Add(resource);
             }
@@ -281,109 +328,26 @@ public class ResourceManager : MonoBehaviour
         
         return visibleResources;
     }
-    
-    public void Reset()
-    {
-        // Reset all resources to initial state
-        foreach (var definition in resourceDefinitions)
-        {
-            resources[definition.ID] = new Resource(definition);
-        }
-    }
-    
-    public ResourceData SerializeData()
-    {
-        ResourceData data = new ResourceData();
-        data.resourceStates = new List<ResourceState>();
-        
-        foreach (var resource in resources.Values)
-        {
-            data.resourceStates.Add(new ResourceState
-            {
-                id = resource.Definition.ID,
-                amount = resource.Amount,
-                capacity = resource.Capacity,
-                isUnlocked = resource.IsUnlocked
-            });
-        }
-        
-        return data;
-    }
-    
-    public void DeserializeData(ResourceData data)
-    {
-        if (data == null || data.resourceStates == null)
-            return;
-            
-        foreach (var state in data.resourceStates)
-        {
-            if (resources.ContainsKey(state.id))
-            {
-                resources[state.id].Amount = state.amount;
-                resources[state.id].Capacity = state.capacity;
-                resources[state.id].IsUnlocked = state.isUnlocked;
-            }
-        }
-    }
-}
-
-/// <summary>
-/// Definition for a resource type - used for editor configuration
-/// </summary>
-[Serializable]
-public class ResourceDefinition
-{
-    public string ID;
-    public string DisplayName;
-    public string Description;
-    public Sprite Icon;
-    public bool HasCapacity = false;
-    public float InitialCapacity = 100f;
-    public float InitialAmount = 0f;
-    public bool VisibleByDefault = false;
-}
-
-/// <summary>
-/// Runtime instance of a resource
-/// </summary>
-public class Resource
-{
-    public ResourceDefinition Definition { get; private set; }
-    public float Amount { get; set; }
-    public float Capacity { get; set; }
-    public bool IsUnlocked { get; set; }
-    
-    // Delegate for custom visibility conditions
-    public Func<bool> VisibilityCondition { get; set; } = () => true;
-    
-    public bool IsVisible => IsUnlocked && (Definition.VisibleByDefault || VisibilityCondition());
-    
-    public Resource(ResourceDefinition definition)
-    {
-        Definition = definition;
-        Amount = definition.InitialAmount;
-        Capacity = definition.InitialCapacity;
-        IsUnlocked = definition.VisibleByDefault;
-    }
 }
 
 /// <summary>
 /// Serializable data for resources
 /// </summary>
 [Serializable]
-public class ResourceData
+public class ResourceSaveData
 {
-    public List<ResourceState> resourceStates;
-}
+    public List<ResourceData> Resources = new List<ResourceData>();
 
-/// <summary>
-/// Serializable state of a single resource
-/// </summary>
-[Serializable]
-public class ResourceState
-{
-    public string id;
-    public float amount;
-    public float capacity;
-    public bool isUnlocked;
+    public Dictionary<string, float> ResourceAmounts = new Dictionary<string, float>();
+    public Dictionary<string, bool> ResourceUnlocked = new Dictionary<string, bool>();
+    public Dictionary<string, float> ResourceCapacities = new Dictionary<string, float>();
+    
+    [Serializable]
+    public class ResourceData
+    {
+        public string ID;
+        public float Amount;
+        public float Capacity;
+        public bool IsUnlocked;
+    }
 }

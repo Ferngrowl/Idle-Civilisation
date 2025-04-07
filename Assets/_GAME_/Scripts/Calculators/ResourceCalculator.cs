@@ -1,16 +1,19 @@
 using System.Collections.Generic;
 using UnityEngine;
+using Game.Interfaces;
+using Game.Models;
+using GameConfiguration;
 
 /// <summary>
 /// Handles all resource calculations including production, consumption, and capacity
 /// </summary>
 public class ResourceCalculator
 {
-    private ResourceManager resourceManager;
-    private BuildingManager buildingManager;
-    private UpgradeManager upgradeManager;
+    private IResourceManager resourceManager;
+    private IBuildingManager buildingManager;
+    private IUpgradeManager upgradeManager;
     
-    public ResourceCalculator(ResourceManager resourceManager, BuildingManager buildingManager, UpgradeManager upgradeManager)
+    public ResourceCalculator(IResourceManager resourceManager, IBuildingManager buildingManager, IUpgradeManager upgradeManager)
     {
         this.resourceManager = resourceManager;
         this.buildingManager = buildingManager;

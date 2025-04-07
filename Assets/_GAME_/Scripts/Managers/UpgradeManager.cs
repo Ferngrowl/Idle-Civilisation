@@ -2,322 +2,289 @@ using System;
 using System.Collections.Generic;
 using UnityEngine;
 using System.Linq;
+using Game.Interfaces;
+using Game.Models;
+using Serialization;
+using GameConfiguration;
 
 /// <summary>
-/// Manages all upgrades in the game. Handles purchasing, effects, and unlocks.
+/// Manages upgrades. Handles purchasing, effects, and visibility.
 /// </summary>
-public class UpgradeManager : MonoBehaviour
+public class UpgradeManager : MonoBehaviour, IUpgradeManager
 {
     [SerializeField] private List<UpgradeDefinition> upgradeDefinitions = new List<UpgradeDefinition>();
     
     // Runtime upgrade data
     private Dictionary<string, Upgrade> upgrades = new Dictionary<string, Upgrade>();
     
+    // Dependencies
+    private IResourceManager resourceManager;
+    private IBuildingManager buildingManager;
+    private IUIManager uiManager;
+    
     public void Initialize()
     {
+        // Get dependencies
+        resourceManager = ServiceLocator.Get<IResourceManager>();
+        buildingManager = ServiceLocator.Get<IBuildingManager>();
+        uiManager = ServiceLocator.Get<IUIManager>();
+        
         // Initialize all upgrades from definitions
         foreach (var definition in upgradeDefinitions)
         {
             upgrades[definition.ID] = new Upgrade(definition);
         }
         
-        // Set up visibility conditions
-        SetupUpgradeVisibility();
-    }
-    
-    public UpgradeDefinition GetUpgradeDefinition(string upgradeID) {
-    // Example: Retrieve from a predefined list or dictionary
-    return upgradeDefinitions.Find(def => def.ID == upgradeID);
+        SetupVisibilityConditions();
     }
     
     /// <summary>
-    /// Setup advanced visibility conditions for upgrades
+    /// Configure visibility conditions for upgrades
     /// </summary>
-    private void SetupUpgradeVisibility()
+    private void SetupVisibilityConditions()
     {
         foreach (var upgrade in upgrades.Values)
         {
-            if (upgrade.Definition.VisibilityRequirements != null && upgrade.Definition.VisibilityRequirements.Count > 0)
+            var def = upgrade.Definition;
+            
+            upgrade.VisibilityCondition = () => 
             {
-                upgrade.VisibilityCondition = () => 
-                    upgrade.Definition.VisibilityRequirements.All(req =>
-                        (string.IsNullOrEmpty(req.RequiredBuildingID) || 
-                        GameManager.Instance.Buildings.GetBuildingCount(req.RequiredBuildingID) >= req.RequiredCount) &&
-                        (string.IsNullOrEmpty(req.RequiredResourceID) || 
-                        GameManager.Instance.Resources.GetAmount(req.RequiredResourceID) >= req.RequiredAmount)
-                    );
-            }
+                // Check building requirements
+                foreach (string requiredBuildingID in def.RequiredBuildings)
+                {
+                    if (buildingManager.GetBuildingCount(requiredBuildingID) <= 0)
+                        return false;
+                }
+                
+                // Check upgrade prerequisites
+                foreach (string prerequisiteID in def.Prerequisites)
+                {
+                    if (!HasUpgrade(prerequisiteID))
+                        return false;
+                }
+                
+                // If we reach here, all requirements are met
+                return true;
+            };
         }
     }
     
-    public void Tick(float deltaTime)
+    public void Tick(long tickNumber)
     {
-        // Check for new visible upgrades
-        CheckVisibilityUpdates();
+        // Check for upgrades that should be unlocked based on visibility conditions
+        foreach (var upgrade in upgrades.Values)
+        {
+            if (!upgrade.IsUnlocked && upgrade.VisibilityCondition())
+            {
+                upgrade.IsUnlocked = true;
+                
+                // Refresh UI
+                uiManager.RefreshUpgradeView();
+            }
+        }
     }
     
     /// <summary>
-    /// Checks if any upgrades have become visible and updates the UI
+    /// Check if player can purchase an upgrade
     /// </summary>
-    private void CheckVisibilityUpdates()
-    {
-        Dictionary<string, bool> oldVisibility = new Dictionary<string, bool>();
-        
-        // First, store all current visibility states
-        foreach (var pair in upgrades)
-        {
-            oldVisibility[pair.Key] = pair.Value.IsVisible;
-        }
-        
-        // Reset all visibility conditions to force re-evaluation
-        SetupUpgradeVisibility();
-        
-        // Now check for changes
-        bool visibilityChanged = false;
-        foreach (var pair in upgrades)
-        {
-            bool wasVisible = oldVisibility[pair.Key];
-            bool isNowVisible = pair.Value.IsVisible;
-            
-            if (isNowVisible != wasVisible)
-            {
-                visibilityChanged = true;
-                break;
-            }
-        }
-        
-        if (visibilityChanged)
-        {
-            GameManager.Instance.UI.RefreshUpgradeView();
-        }
-    }
-    
     public bool CanPurchaseUpgrade(string upgradeID)
     {
-        if (!upgrades.ContainsKey(upgradeID))
+        // Check if upgrade exists and is not already purchased
+        if (!upgrades.ContainsKey(upgradeID) || upgrades[upgradeID].IsPurchased)
             return false;
             
-        Upgrade upgrade = upgrades[upgradeID];
-        
-        // Check if upgrade is available for purchase
-        if (!upgrade.IsAvailableForPurchase)
+        // Check if upgrade is visible/unlocked
+        if (!upgrades[upgradeID].IsVisible)
             return false;
             
-        // Check if prerequisites are met
-        if (upgrade.Definition.Prerequisites != null)
+        // Check upgrade prerequisites
+        foreach (string prerequisiteID in upgrades[upgradeID].Definition.Prerequisites)
         {
-            foreach (var prerequisite in upgrade.Definition.Prerequisites)
-            {
-                if (!IsUpgradePurchased(prerequisite))
-                    return false;
-            }
+            if (!HasUpgrade(prerequisiteID))
+                return false;
         }
         
-        // Check if we can afford it
-        return GameManager.Instance.Resources.CanAfford(
-            upgrade.Definition.Cost.ToDictionary(r => r.ResourceID, r => r.Amount)
-        );
+        // Check if player can afford the upgrade
+        Dictionary<string, float> cost = upgrades[upgradeID].GetCost();
+        return resourceManager.CanAfford(cost);
     }
     
-    public void PurchaseUpgrade(string upgradeID)
+    /// <summary>
+    /// Purchase an upgrade
+    /// </summary>
+    public bool PurchaseUpgrade(string upgradeID)
     {
         if (!CanPurchaseUpgrade(upgradeID))
+            return false;
+            
+        // Spend resources
+        Dictionary<string, float> cost = upgrades[upgradeID].GetCost();
+        resourceManager.SpendResources(cost);
+        
+        // Mark as purchased
+        upgrades[upgradeID].IsPurchased = true;
+        
+        // Apply upgrade effects
+        ApplyUpgradeEffects(upgradeID);
+        
+        // Refresh UI
+        uiManager.RefreshUpgradeView();
+        
+        return true;
+    }
+    
+    /// <summary>
+    /// Apply the effects of an upgrade
+    /// </summary>
+    private void ApplyUpgradeEffects(string upgradeID)
+    {
+        if (!upgrades.ContainsKey(upgradeID))
             return;
             
         Upgrade upgrade = upgrades[upgradeID];
         
-        // Spend resources
-        GameManager.Instance.Resources.SpendResources(
-            upgrade.Definition.Cost.ToDictionary(r => r.ResourceID, r => r.Amount)
-        );
-        
-        // Mark as purchased
-        upgrade.IsPurchased = true;
-        
-        // Apply immediate effects
-        ApplyUpgradeEffects(upgrade);
-        
-        // Update UI
-        GameManager.Instance.UI.RefreshUpgradeView();
-        
-        // Check if this unlocks other upgrades
-        CheckDependentUpgrades(upgradeID);
-    }
-    
-    /// <summary>
-    /// Applies effects of an upgrade
-    /// </summary>
-    private void ApplyUpgradeEffects(Upgrade upgrade)
-    {
         foreach (var effect in upgrade.Definition.Effects)
         {
             switch (effect.Type)
             {
+                case EffectType.UnlockResource:
+                    resourceManager.UnlockResource(effect.TargetID);
+                    break;
+                    
                 case EffectType.UnlockBuilding:
-                    if (!string.IsNullOrEmpty(effect.TargetID))
-                        GameManager.Instance.Buildings.UnlockBuilding(effect.TargetID);
+                    // Handled by BuildingManager visibility conditions
                     break;
                     
                 case EffectType.UnlockUpgrade:
-                    if (!string.IsNullOrEmpty(effect.TargetID))
-                        UnlockUpgrade(effect.TargetID);
+                    // Unlock the target upgrade
+                    if (upgrades.ContainsKey(effect.TargetID))
+                    {
+                        upgrades[effect.TargetID].IsUnlocked = true;
+                    }
                     break;
                     
-                case EffectType.UnlockResource:
-                    if (!string.IsNullOrEmpty(effect.TargetID))
-                        GameManager.Instance.Resources.UnlockResource(effect.TargetID);
-                    break;
-                    
-                case EffectType.ProductionMultiplier:
-                    // Applied in resource production calculation
-                    break;
-                    
-                case EffectType.StorageMultiplier:
-                    // Applied in resource capacity calculation
-                    break;
-                    
-                case EffectType.ConsumptionReduction:
-                    // Applied in resource consumption calculation
-                    break;
-                    
-                case EffectType.BuildingProductionMultiplier:
-                    // Applied in building production calculation
-                    break;
-                    
-                case EffectType.ResourceCapacityMultiplier:
-                    // Applied in resource capacity calculation
-                    break;
+                // Other effects are applied during resource calculations
             }
         }
     }
     
     /// <summary>
-    /// Checks if any upgrades should be unlocked because their prerequisite was purchased
+    /// Check if player has purchased an upgrade
     /// </summary>
-    private void CheckDependentUpgrades(string purchasedUpgradeID)
+    public bool HasUpgrade(string upgradeID)
     {
-        foreach (var upgrade in upgrades.Values)
-        {
-            if (!upgrade.IsUnlocked && 
-                upgrade.Definition.Prerequisites != null && 
-                upgrade.Definition.Prerequisites.Contains(purchasedUpgradeID))
-            {
-                // Check if all prerequisites are now met
-                bool allPrerequisitesMet = true;
-                foreach (var prerequisite in upgrade.Definition.Prerequisites)
-                {
-                    if (!IsUpgradePurchased(prerequisite))
-                    {
-                        allPrerequisitesMet = false;
-                        break;
-                    }
-                }
-                
-                if (allPrerequisitesMet)
-                {
-                    UnlockUpgrade(upgrade.Definition.ID);
-                }
-            }
-        }
+        return upgrades.ContainsKey(upgradeID) && upgrades[upgradeID].IsPurchased;
     }
     
-    public bool IsUpgradePurchased(string upgradeID)
+    /// <summary>
+    /// Get all upgrades
+    /// </summary>
+    public List<Upgrade> GetAllUpgrades()
     {
-        if (upgrades.ContainsKey(upgradeID))
-        {
-            return upgrades[upgradeID].IsPurchased;
-        }
-        return false;
+        return new List<Upgrade>(upgrades.Values);
     }
     
-    public void UnlockUpgrade(string upgradeID)
-    {
-        if (upgrades.ContainsKey(upgradeID))
-        {
-            upgrades[upgradeID].IsUnlocked = true;
-            
-            // Notify UI system
-            GameManager.Instance.UI.RefreshUpgradeView();
-        }
-    }
-    
-    public List<Upgrade> GetVisibleUpgrades()
-    {
-        List<Upgrade> visibleUpgrades = new List<Upgrade>();
-        
-        foreach (var upgrade in upgrades.Values)
-        {
-            if (upgrade.IsAvailableForPurchase)
-            {
-                visibleUpgrades.Add(upgrade);
-            }
-        }
-        
-        return visibleUpgrades;
-    }
-    
+    /// <summary>
+    /// Get all purchased upgrades
+    /// </summary>
     public List<Upgrade> GetAllPurchasedUpgrades()
     {
-        List<Upgrade> purchasedUpgrades = new List<Upgrade>();
+        List<Upgrade> purchased = new List<Upgrade>();
         
         foreach (var upgrade in upgrades.Values)
         {
             if (upgrade.IsPurchased)
             {
-                purchasedUpgrades.Add(upgrade);
+                purchased.Add(upgrade);
             }
         }
         
-        return purchasedUpgrades;
+        return purchased;
     }
     
-    public Upgrade GetUpgrade(string upgradeID)
+    /// <summary>
+    /// Get all visible upgrades
+    /// </summary>
+    public List<Upgrade> GetVisibleUpgrades()
     {
-        if (upgrades.ContainsKey(upgradeID))
-        {
-            return upgrades[upgradeID];
-        }
-        return null;
-    }
-    
-    public void Reset()
-    {
-        // Reset all upgrades to initial state
-        foreach (var definition in upgradeDefinitions)
-        {
-            upgrades[definition.ID] = new Upgrade(definition);
-        }
-    }
-    
-    public UpgradeData SerializeData()
-    {
-        UpgradeData data = new UpgradeData();
-        data.upgradeStates = new List<UpgradeState>();
+        List<Upgrade> visible = new List<Upgrade>();
         
         foreach (var upgrade in upgrades.Values)
         {
-            data.upgradeStates.Add(new UpgradeState
+            if (upgrade.IsVisible && !upgrade.IsPurchased)
             {
-                id = upgrade.Definition.ID,
-                isPurchased = upgrade.IsPurchased,
-                isUnlocked = upgrade.IsUnlocked
+                visible.Add(upgrade);
+            }
+        }
+        
+        return visible;
+    }
+
+    /// <summary>
+    /// Get an upgrade definition by ID
+    /// </summary>
+    public UpgradeDefinition GetUpgradeDefinition(string upgradeID)
+    {
+        if (upgrades.ContainsKey(upgradeID))
+        {
+            return upgrades[upgradeID].Definition;
+        }
+        return null;
+    }
+
+    /// <summary>
+    /// Reset all upgrades to initial state
+    /// </summary>
+    public void Reset()
+    {
+        foreach (var upgrade in upgrades.Values)
+        {
+            upgrade.Reset();
+        }
+    }
+    
+    /// <summary>
+    /// Create serializable data for save game
+    /// </summary>
+    public UpgradeSaveData SerializeData()
+    {
+        UpgradeSaveData data = new UpgradeSaveData();
+        
+        foreach (var kvp in upgrades)
+        {
+            data.Upgrades.Add(new UpgradeSaveData.UpgradeData
+            {
+                ID = kvp.Key,
+                IsPurchased = kvp.Value.IsPurchased,
+                IsUnlocked = kvp.Value.IsUnlocked
             });
         }
         
         return data;
     }
     
-    public void DeserializeData(UpgradeData data)
+    /// <summary>
+    /// Load from serialized data
+    /// </summary>
+    public void DeserializeData(UpgradeSaveData data)
     {
-        if (data == null || data.upgradeStates == null)
+        if (data == null || data.Upgrades == null)
             return;
-            
-        foreach (var state in data.upgradeStates)
+        
+        // Reset all upgrades first
+        foreach (var upgrade in upgrades.Values)
         {
-            if (upgrades.ContainsKey(state.id))
+            upgrade.Reset();
+        }
+        
+        // Apply saved values
+        foreach (var savedUpgrade in data.Upgrades)
+        {
+            if (upgrades.ContainsKey(savedUpgrade.ID))
             {
-                upgrades[state.id].IsPurchased = state.isPurchased;
-                upgrades[state.id].IsUnlocked = state.isUnlocked;
+                Upgrade upgrade = upgrades[savedUpgrade.ID];
+                upgrade.IsPurchased = savedUpgrade.IsPurchased;
+                upgrade.IsUnlocked = savedUpgrade.IsUnlocked;
             }
         }
     }
@@ -361,6 +328,9 @@ public class UpgradeDefinition
     public List<UpgradeEffect> Effects = new List<UpgradeEffect>();
     
     public bool VisibleByDefault = false;
+
+    public List<string> RequiredBuildings = new List<string>();
+    public List<string> RequiredUpgrades = new List<string>();
 }
 
 /// <summary>
@@ -397,6 +367,22 @@ public class Upgrade
         Definition = definition;
         IsPurchased = false;
         IsUnlocked = definition.VisibleByDefault;
+    }
+
+    public Dictionary<string, float> GetCost()
+    {
+        Dictionary<string, float> cost = new Dictionary<string, float>();
+        foreach (var resourceAmount in Definition.Cost)
+        {
+            cost[resourceAmount.ResourceID] = resourceAmount.Amount;
+        }
+        return cost;
+    }
+
+    public void Reset()
+    {
+        IsPurchased = false;
+        IsUnlocked = Definition.VisibleByDefault;
     }
 }
 
