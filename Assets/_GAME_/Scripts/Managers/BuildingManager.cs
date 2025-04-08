@@ -12,50 +12,14 @@ using GameConfiguration;
 /// </summary>
 public class BuildingManager : MonoBehaviour, IBuildingManager
 {
-    [SerializeField] private List<BuildingDefinition> buildingDefinitions = new List<BuildingDefinition>();
+    [SerializeField] private List<GameConfiguration.BuildingDefinition> buildingDefinitions = new List<GameConfiguration.BuildingDefinition>();
     
     // Runtime building data
-    private Dictionary<string, Building> buildings = new Dictionary<string, Building>();
+    private Dictionary<string, Game.Models.Building> buildings = new Dictionary<string, Game.Models.Building>();
     
     // Dependencies
     private IResourceManager resourceManager;
     private IUIManager uiManager;
-    
-    // Dictionary to cache converted BuildingDefinitions by ID
-    private Dictionary<string, GameConfiguration.BuildingDefinition> cachedBuildingDefinitions = 
-        new Dictionary<string, GameConfiguration.BuildingDefinition>();
-    
-    // Get a building definition from GameConfiguration namespace by ID
-    private GameConfiguration.BuildingDefinition GetConfigBuildingDefinition(string id)
-    {
-        // Return from cache if available
-        if (cachedBuildingDefinitions.ContainsKey(id))
-        {
-            return cachedBuildingDefinitions[id];
-        }
-        
-        // Find the original definition
-        var originalDef = buildingDefinitions.Find(def => def.ID == id);
-        if (originalDef == null) 
-        {
-            return null;
-        }
-        
-        // Create a new instance with the same properties for type compatibility
-        // This is a workaround for the namespace ambiguity issues
-        var configDef = new GameConfiguration.BuildingDefinition 
-        {
-            ID = originalDef.ID,
-            DisplayName = originalDef.DisplayName,
-            Description = originalDef.Description,
-            Icon = originalDef.Icon
-            // Copy other properties as needed
-        };
-        
-        // Cache it for future use
-        cachedBuildingDefinitions[id] = configDef;
-        return configDef;
-    }
     
     public void Initialize()
     {
@@ -66,7 +30,7 @@ public class BuildingManager : MonoBehaviour, IBuildingManager
         // Initialize all buildings from definitions
         foreach (var definition in buildingDefinitions)
         {
-            buildings[definition.ID] = new Building(definition);
+            buildings[definition.ID] = new Game.Models.Building(definition);
         }
         
         // Set up visibility conditions
@@ -145,7 +109,7 @@ public class BuildingManager : MonoBehaviour, IBuildingManager
         if (!buildings.ContainsKey(buildingID))
             return false;
             
-        Building building = buildings[buildingID];
+        Game.Models.Building building = buildings[buildingID];
         
         // Check if building is visible and unlocked
         if (!building.IsVisible || !building.IsUnlocked)
@@ -191,7 +155,7 @@ public class BuildingManager : MonoBehaviour, IBuildingManager
         return 0;
     }
     
-    public Building GetBuilding(string buildingID)
+    public Game.Models.Building GetBuilding(string buildingID)
     {
         if (buildings.ContainsKey(buildingID))
         {
@@ -200,9 +164,9 @@ public class BuildingManager : MonoBehaviour, IBuildingManager
         return null;
     }
     
-    public List<Building> GetVisibleBuildings()
+    public List<Game.Models.Building> GetVisibleBuildings()
     {
-        List<Building> visibleBuildings = new List<Building>();
+        List<Game.Models.Building> visibleBuildings = new List<Game.Models.Building>();
         
         foreach (var building in buildings.Values)
         {
@@ -215,9 +179,9 @@ public class BuildingManager : MonoBehaviour, IBuildingManager
         return visibleBuildings;
     }
     
-    public List<Building> GetAllBuildings()
+    public List<Game.Models.Building> GetAllBuildings()
     {
-        return new List<Building>(buildings.Values);
+        return new List<Game.Models.Building>(buildings.Values);
     }
     
     private void UnlockBuilding(string buildingID)
@@ -280,7 +244,7 @@ public class BuildingManager : MonoBehaviour, IBuildingManager
         {
             if (buildings.ContainsKey(savedBuilding.ID))
             {
-                Building building = buildings[savedBuilding.ID];
+                Game.Models.Building building = buildings[savedBuilding.ID];
                 building.Count = savedBuilding.Count;
                 building.IsUnlocked = savedBuilding.IsUnlocked;
             }
@@ -294,15 +258,20 @@ public class BuildingManager : MonoBehaviour, IBuildingManager
     {
         if (buildings.ContainsKey(buildingID))
         {
-            return GetConfigBuildingDefinition(buildingID);
+            return buildings[buildingID].Definition;
         }
         return null;
     }
 
+    /// <summary>
+    /// Calculate the cost to construct a building
+    /// </summary>
     public Dictionary<string, float> CalculateBuildingCost(string buildingID)
     {
         if (buildings.ContainsKey(buildingID))
+        {
             return buildings[buildingID].GetCurrentCost();
+        }
         return new Dictionary<string, float>();
     }
 }

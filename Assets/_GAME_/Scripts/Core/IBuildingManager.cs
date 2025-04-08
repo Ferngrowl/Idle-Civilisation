@@ -11,10 +11,10 @@ namespace Game.Interfaces
     /// </summary>
     public interface IBuildingManager
     {
-        // Building access
-        Building GetBuilding(string buildingID);
-        List<Building> GetAllBuildings();
-        List<Building> GetVisibleBuildings();
+        // Building access - use fully qualified type
+        Game.Models.Building GetBuilding(string buildingID);
+        List<Game.Models.Building> GetAllBuildings();
+        List<Game.Models.Building> GetVisibleBuildings();
         int GetBuildingCount(string buildingID);
         GameConfiguration.BuildingDefinition GetBuildingDefinition(string buildingID);
         

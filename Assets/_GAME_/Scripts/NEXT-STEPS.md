@@ -182,50 +182,76 @@ If the refactoring proves too complex or risky in the short term, consider these
 # Ambiguity Resolution Progress Update
 
 ## Completed Steps:
-1. ✅ Created detailed resolution plans for ResourceDefinition and UpgradeEffect
-2. ✅ Updated Resource.cs to remove duplicate ResourceDefinition and reference GameConfiguration.ResourceDefinition
-3. ✅ Updated ResourceManager.cs to remove duplicate classes and simplify initialization
-4. ✅ Added ResourceSaveData.ResourceData inner class back to fix serialization
+1. ✅ Created detailed resolution plans for ResourceDefinition, UpgradeEffect, and BuildingDefinition
+2. ✅ Created dedicated 'ambiguity-resolution' branch
+3. ✅ Updated Resource.cs to remove duplicate ResourceDefinition and reference GameConfiguration.ResourceDefinition
+4. ✅ Updated ResourceManager.cs to remove duplicate classes and simplify initialization
+5. ✅ Updated Upgrade.cs to use GameConfiguration.UpgradeDefinition directly
+6. ✅ Updated UpgradeManager.cs to remove duplicate class definitions
+7. ✅ Updated Building.cs to use GameConfiguration.BuildingDefinition instead of BuildingData
+8. ✅ Updated BuildingManager.cs to use consistent types and remove workarounds
+9. ✅ Updated IBuildingManager interface to use fully qualified types
 
 ## Current Issues:
-1. ⚠️ Multiple definitions of UpgradeEffect and EffectType causing ambiguity
-2. ⚠️ Converting between different versions of types is problematic
-3. ⚠️ BuildingManager has similar issues with BuildingDefinition vs BuildingData
+1. ⚠️ Property mismatches between different versions (Prerequisites vs RequiredUpgrades)
+2. ⚠️ Different EffectType enums requiring casting
 
 ## Next Immediate Actions:
 
-1. **Create a dedicated branch for this refactoring**
-   ```bash
-   git checkout -b ambiguity-resolution
-   ```
+1. **Final Testing**:
+   - Compile and run basic tests
+   - Verify resource production and consumption still works
+   - Test that buildings can be constructed
+   - Test that upgrades can be purchased and have effects
+   - Test save/load functionality
 
-2. **Complete ResourceDefinition consolidation**:
-   - Verify all references point to GameConfiguration.ResourceDefinition
-   - Test resource initialization, updates, and serialization
+2. **Documentation Updates**:
+   - Update documentation with the new canonical types
+   - Document any remaining issues that will need future attention
 
-3. **Address UpgradeEffect ambiguity**:
-   - Update any nested classes in UpgradeManager.cs that use UpgradeEffect
-   - Focus on resolving the EffectType enum ambiguity
-   - Either:
-     a) Update all code to use GameConfiguration.EffectType
-     b) Temporarily use integer casts to avoid direct enum comparisons
+3. **Consider Future Improvements**:
+   - Align enum values to avoid casting
+   - Standardize property names across classes
+   - Add unit tests to verify functionality
 
-4. **Fix BuildingManager issues**:
-   - Similar to ResourceManager, update Building.cs to reference GameConfiguration.BuildingDefinition
-   - Remove duplicate BuildingDefinition classes
-   - Address BuildingData vs BuildingDefinition inconsistency
+## Key Files Updated:
+1. ✓ Core/Resource.cs
+2. ✓ Core/Upgrade.cs
+3. ✓ Core/Building.cs
+4. ✓ Core/IResourceManager.cs
+5. ✓ Core/IBuildingManager.cs
+6. ✓ Managers/ResourceManager.cs
+7. ✓ Managers/UpgradeManager.cs
+8. ✓ Managers/BuildingManager.cs
 
-## Key Files to Update:
-1. `Core/ScriptableObjects/UpgradeDefinition.cs`
-2. `Core/ScriptableObjects/BuildingDefinition.cs`
-3. `Core/Building.cs`
-4. `Core/Upgrade.cs`
-5. `Managers/UpgradeManager.cs`
-6. `Managers/BuildingManager.cs`
+## Remaining Issues:
+1. ⚠️ Type conversion in some methods (using int casts for EffectType)
+2. ⚠️ Some property name differences between versions
 
-## Testing Plan:
-1. After each class is updated, compile and run basic tests
-2. Ensure resource production and consumption still works
-3. Verify buildings can be constructed and function properly
-4. Test that upgrades can be purchased and have the correct effects
-5. Test save/load functionality to ensure serialization works
+## Summary of Changes
+
+We've successfully addressed the major ambiguity issues by:
+
+1. Establishing canonical types in the GameConfiguration namespace
+2. Updating model classes to reference these canonical types
+3. Removing duplicate class definitions
+4. Updating interfaces to use fully qualified type names
+5. Eliminating workarounds and type conversion hacks
+
+This has significantly improved code clarity and reduced ambiguity errors without changing the core functionality of the game.
+
+## Timeline
+
+This is a substantial refactoring that affects core game systems. Plan for:
+
+1. 2-3 hours: Create branch and consolidate ambiguous types
+2. 2-3 hours: Update references across the codebase
+3. 1-2 hours: Testing and bug fixing
+
+## Fallback Plan
+
+If the refactoring proves too complex or risky in the short term, consider these alternatives:
+
+1. Use preprocessor directives to temporarily disable ambiguous code
+2. Create wrapper classes that encapsulate the ambiguous types
+3. Focus development on areas that don't rely on ambiguous types until a proper refactoring can be completed

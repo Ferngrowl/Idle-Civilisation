@@ -1,4 +1,5 @@
 using System;
+using System.Collections.Generic;
 using GameConfiguration;
 
 namespace Game.Models
@@ -9,7 +10,7 @@ namespace Game.Models
     [Serializable]
     public class Upgrade
     {
-        public UpgradeDefinition Definition { get; private set; }
+        public GameConfiguration.UpgradeDefinition Definition { get; private set; }
         public bool IsPurchased { get; set; }
         public bool IsUnlocked { get; set; }
         
@@ -17,7 +18,7 @@ namespace Game.Models
         
         public bool IsVisible => IsUnlocked && (Definition.VisibleByDefault || VisibilityCondition());
         
-        public Upgrade(UpgradeDefinition definition)
+        public Upgrade(GameConfiguration.UpgradeDefinition definition)
         {
             Definition = definition;
             IsPurchased = false;
@@ -37,7 +38,7 @@ namespace Game.Models
         {
             Dictionary<string, float> cost = new Dictionary<string, float>();
             
-            foreach (var resourceCost in Definition.Costs)
+            foreach (var resourceCost in Definition.Cost)
             {
                 cost[resourceCost.ResourceID] = resourceCost.Amount;
             }

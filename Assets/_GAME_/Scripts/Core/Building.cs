@@ -11,11 +11,17 @@ namespace Game.Models
     [Serializable]
     public class Building
     {
-        public BuildingData Definition { get; private set; }
+        public GameConfiguration.BuildingDefinition Definition { get; private set; }
         public int Count { get; set; }
         public bool IsUnlocked { get; set; }
         
-        public Building(BuildingData definition)
+        // Delegate for custom visibility conditions
+        public Func<bool> VisibilityCondition { get; set; } = () => true;
+        
+        // Property to check if the building should be visible in the UI
+        public bool IsVisible => IsUnlocked && (Definition.VisibleByDefault || VisibilityCondition());
+        
+        public Building(GameConfiguration.BuildingDefinition definition)
         {
             Definition = definition;
             Count = 0;

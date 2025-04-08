@@ -2,7 +2,7 @@
 
 ## Current Situation
 
-We're encountering ambiguity issues with UpgradeEffect and EffectType in multiple places:
+We were encountering ambiguity issues with UpgradeEffect and EffectType in multiple places:
 
 ```csharp
 // Error example:
@@ -11,95 +11,65 @@ if (effect.Type == EffectType.ProductionMultiplier && effect.TargetID == resourc
 // Ambiguity between 'EffectType.ProductionMultiplier' and 'EffectType.ProductionMultiplier'
 ```
 
-This suggests there are multiple definitions of UpgradeEffect and EffectType in different namespaces, similar to our ResourceDefinition issue.
+This suggested multiple definitions of UpgradeEffect and EffectType in different namespaces, similar to our ResourceDefinition issue.
 
-## Investigation Required
+## Implementation Progress
 
-We need to locate all definitions of these types:
+### ✅ Step 1: Located All Definitions
 
-1. Look for UpgradeEffect in:
-   - Global namespace
-   - GameConfiguration namespace
-   - Other potential namespaces
+We found multiple definitions of these types:
 
-2. Look for EffectType enum in:
-   - Global namespace
-   - GameConfiguration namespace
-   - Other potential namespaces
+- In UpgradeManager.cs (global namespace):
+  ```csharp
+  public enum EffectType { UnlockBuilding, UnlockUpgrade, UnlockResource, ... }
+  public class UpgradeEffect { ... }
+  ```
 
-## Implementation Plan
+- In GameConfiguration namespace (ScriptableObjects/UpgradeDefinition.cs):
+  ```csharp
+  public enum EffectType { ProductionMultiplier, ConsumptionReduction, ... }
+  public class UpgradeEffect { ... }
+  ```
 
-### Step 1: Locate All Definitions
+### ✅ Step 2: Chose Canonical Definitions
 
-Search the codebase for all definitions of UpgradeEffect and EffectType.
+We selected:
+- `GameConfiguration.UpgradeEffect` as the canonical definition
+- `GameConfiguration.EffectType` as the canonical definition for the enum
 
-### Step 2: Choose Canonical Definitions
+### ✅ Step 3: Updated All References
 
-Based on our overall strategy:
-- GameConfiguration.UpgradeEffect should be the canonical definition
-- GameConfiguration.EffectType should be the canonical definition for the enum
+1. Updated all references to UpgradeEffect to use GameConfiguration.UpgradeEffect
+2. Updated all references to EffectType to use GameConfiguration.EffectType
+3. Used integer casts to handle the different enum values between versions
 
-### Step 3: Update All References
+### ✅ Step 4: Updated Core Classes
 
-1. Update all references to UpgradeEffect to use GameConfiguration.UpgradeEffect
-2. Update all references to EffectType to use GameConfiguration.EffectType
-3. Fully qualify all references to enum values:
+1. Updated Game.Models.Upgrade to use GameConfiguration.UpgradeDefinition directly
+2. Fixed property mismatches (Prerequisites vs RequiredUpgrades)
+3. Fixed visibility conditions to check against the proper properties
 
-```csharp
-// Change from:
-if (effect.Type == EffectType.ProductionMultiplier)
+### ✅ Step 5: Fixed Serialization Issues
 
-// To:
-if (effect.Type == GameConfiguration.EffectType.ProductionMultiplier)
-```
+Updated UpgradeSaveData class to properly handle the serialization of upgrades.
 
-### Step 4: Update ResourceManager
+## Remaining Issues
 
-Update the ResourceManager to properly handle these types:
+1. ⚠️ The two EffectType enums have different values, requiring int casting for conversion
+2. ⚠️ Some property name differences between versions (Prerequisites vs RequiredUpgrades)
+3. ⚠️ Need to test upgrade functionality to verify it works with the consolidated types
 
-```csharp
-// In ResourceManager.cs:
-private float CalculateProductionRate(string resourceID)
-{
-    // ... existing code ...
-    
-    // Apply upgrades
-    float multiplier = 1f;
-    foreach (var upgrade in upgradeManager.GetAllPurchasedUpgrades())
-    {
-        foreach (var effect in upgrade.Definition.Effects)
-        {
-            if (effect.Type == GameConfiguration.EffectType.ProductionMultiplier && 
-                effect.TargetID == resourceID)
-            {
-                multiplier *= (1f + effect.Value);
-            }
-        }
-    }
-    
-    return baseProduction * multiplier;
-}
-```
+## Testing Plan
 
-Repeat for CalculateConsumptionRate and any other methods using these types.
-
-### Step 5: Update UpgradeManager
-
-Update the UpgradeManager to use the canonical types consistently.
-
-### Step 6: Update Upgrade Model Classes
-
-Similar to what we did with Resource, update any Upgrade model classes to reference the canonical types.
-
-### Step 7: Remove Duplicate Definitions
-
-Once all references are updated, remove the duplicate definitions of UpgradeEffect and EffectType.
-
-## Testing
-
-Test all upgrade-related functionality after these changes:
+Test all upgrade-related functionality:
 1. Purchasing upgrades
 2. Effects of upgrades on production/consumption
 3. Upgrade costs and requirements
 4. Upgrade UI display
-5. Save/load of upgrade data 
+5. Save/load of upgrade data
+
+## Next Steps
+
+1. Address the BuildingManager ambiguity issues using a similar approach
+2. Comprehensive testing of all game systems
+3. Consider aligning the enum values in future updates to avoid casting 

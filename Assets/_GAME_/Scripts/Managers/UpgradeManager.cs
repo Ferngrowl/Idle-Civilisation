@@ -12,10 +12,10 @@ using GameConfiguration;
 /// </summary>
 public class UpgradeManager : MonoBehaviour, IUpgradeManager
 {
-    [SerializeField] private List<UpgradeDefinition> upgradeDefinitions = new List<UpgradeDefinition>();
+    [SerializeField] private List<GameConfiguration.UpgradeDefinition> upgradeDefinitions = new List<GameConfiguration.UpgradeDefinition>();
     
     // Runtime upgrade data
-    private Dictionary<string, Upgrade> upgrades = new Dictionary<string, Upgrade>();
+    private Dictionary<string, Game.Models.Upgrade> upgrades = new Dictionary<string, Game.Models.Upgrade>();
     
     // Dependencies
     private IResourceManager resourceManager;
@@ -32,38 +32,39 @@ public class UpgradeManager : MonoBehaviour, IUpgradeManager
         // Initialize all upgrades from definitions
         foreach (var definition in upgradeDefinitions)
         {
-            upgrades[definition.ID] = new Upgrade(definition);
+            upgrades[definition.ID] = new Game.Models.Upgrade(definition);
         }
         
-        SetupVisibilityConditions();
+        SetupUpgradeVisibility();
     }
     
     /// <summary>
     /// Configure visibility conditions for upgrades
     /// </summary>
-    private void SetupVisibilityConditions()
+    private void SetupUpgradeVisibility()
     {
         foreach (var upgrade in upgrades.Values)
         {
-            var def = upgrade.Definition;
+            // Closure to capture the current upgrade
+            var currentDef = upgrade.Definition;
             
-            upgrade.VisibilityCondition = () => 
+            // Create a complex visibility condition that checks buildings, upgrades and resources
+            upgrade.VisibilityCondition = () =>
             {
-                // Check building requirements
-                foreach (string requiredBuildingID in def.RequiredBuildings)
+                // Check required buildings
+                foreach (var buildingID in currentDef.RequiredBuildings)
                 {
-                    if (buildingManager.GetBuildingCount(requiredBuildingID) <= 0)
+                    if (buildingManager.GetBuildingCount(buildingID) <= 0)
                         return false;
                 }
                 
-                // Check upgrade prerequisites
-                foreach (string prerequisiteID in def.Prerequisites)
+                // Check required upgrades (using RequiredUpgrades instead of Prerequisites)
+                foreach (var upgradeID in currentDef.RequiredUpgrades)
                 {
-                    if (!HasUpgrade(prerequisiteID))
+                    if (!HasPurchasedUpgrade(upgradeID))
                         return false;
                 }
                 
-                // If we reach here, all requirements are met
                 return true;
             };
         }
@@ -85,32 +86,103 @@ public class UpgradeManager : MonoBehaviour, IUpgradeManager
     }
     
     /// <summary>
-    /// Check if player can purchase an upgrade
+    /// Check if an upgrade has all prerequisites met
     /// </summary>
-    public bool CanPurchaseUpgrade(string upgradeID)
+    private bool ArePrerequisitesMet(GameConfiguration.UpgradeDefinition upgradeDefinition)
     {
-        // Check if upgrade exists and is not already purchased
-        if (!upgrades.ContainsKey(upgradeID) || upgrades[upgradeID].IsPurchased)
-            return false;
-            
-        // Check if upgrade is visible/unlocked
-        if (!upgrades[upgradeID].IsVisible)
-            return false;
-            
-        // Check upgrade prerequisites
-        foreach (string prerequisiteID in upgrades[upgradeID].Definition.Prerequisites)
+        // Check required upgrades (using RequiredUpgrades instead of Prerequisites)
+        foreach (var prerequisiteID in upgradeDefinition.RequiredUpgrades)
         {
-            if (!HasUpgrade(prerequisiteID))
+            if (!HasPurchasedUpgrade(prerequisiteID))
                 return false;
         }
         
-        // Check if player can afford the upgrade
-        Dictionary<string, float> cost = upgrades[upgradeID].GetCost();
-        return resourceManager.CanAfford(cost);
+        // Check building requirements
+        foreach (var buildingID in upgradeDefinition.RequiredBuildings)
+        {
+            if (buildingManager.GetBuildingCount(buildingID) <= 0)
+                return false;
+        }
+        
+        return true;
+    }
+
+    /// <summary>
+    /// Apply effects of a purchased upgrade
+    /// </summary>
+    private void ApplyUpgradeEffects(string upgradeID)
+    {
+        if (!upgrades.ContainsKey(upgradeID))
+            return;
+            
+        Game.Models.Upgrade upgrade = upgrades[upgradeID];
+        
+        foreach (var effect in upgrade.Definition.Effects)
+        {
+            // Convert to GameConfiguration.EffectType for comparison
+            GameConfiguration.EffectType effectType = (GameConfiguration.EffectType)(int)effect.Type;
+            
+            // Apply different effects based on type
+            switch (effectType)
+            {
+                case GameConfiguration.EffectType.SpecialUnlock:
+                    // Handle unlocking special content based on TargetID
+                    if (effect.TargetID.StartsWith("resource."))
+                    {
+                        string resourceID = effect.TargetID.Substring(9);
+                        // Use UnlockResource through resourceManager
+                        // Note: If UnlockResource isn't in IResourceManager, may need to cast
+                        if (resourceManager is ResourceManager rm)
+                        {
+                            rm.UnlockResource(resourceID);
+                        }
+                    }
+                    break;
+                    
+                // Add cases for other effect types as needed
+                case GameConfiguration.EffectType.ProductionMultiplier:
+                    // Production multipliers are applied in ResourceManager's calculation
+                    break;
+                    
+                case GameConfiguration.EffectType.ConsumptionReduction:
+                    // Consumption reductions are applied in ResourceManager's calculation
+                    break;
+            }
+        }
+    }
+
+    /// <summary>
+    /// Check if all prerequisites for an upgrade are met
+    /// </summary>
+    public bool CanPurchaseUpgrade(string upgradeID)
+    {
+        if (!upgrades.ContainsKey(upgradeID))
+            return false;
+            
+        Game.Models.Upgrade upgrade = upgrades[upgradeID];
+        
+        // Already purchased?
+        if (upgrade.IsPurchased)
+            return false;
+            
+        // Check resources
+        if (!resourceManager.CanAfford(upgrade.GetCost()))
+            return false;
+            
+        // Check prerequisites (using RequiredUpgrades property)
+        return ArePrerequisitesMet(upgrade.Definition);
     }
     
     /// <summary>
-    /// Purchase an upgrade
+    /// Check if the player has purchased a specific upgrade
+    /// </summary>
+    public bool HasPurchasedUpgrade(string upgradeID)
+    {
+        return upgrades.ContainsKey(upgradeID) && upgrades[upgradeID].IsPurchased;
+    }
+
+    /// <summary>
+    /// Apply the effects of purchasing an upgrade
     /// </summary>
     public bool PurchaseUpgrade(string upgradeID)
     {
@@ -118,8 +190,7 @@ public class UpgradeManager : MonoBehaviour, IUpgradeManager
             return false;
             
         // Spend resources
-        Dictionary<string, float> cost = upgrades[upgradeID].GetCost();
-        resourceManager.SpendResources(cost);
+        resourceManager.SpendResources(upgrades[upgradeID].GetCost());
         
         // Mark as purchased
         upgrades[upgradeID].IsPurchased = true;
@@ -128,44 +199,9 @@ public class UpgradeManager : MonoBehaviour, IUpgradeManager
         ApplyUpgradeEffects(upgradeID);
         
         // Refresh UI
-        uiManager.RefreshUpgradeView();
+        ServiceLocator.Get<IUIManager>().RefreshUpgradeView();
         
         return true;
-    }
-    
-    /// <summary>
-    /// Apply the effects of an upgrade
-    /// </summary>
-    private void ApplyUpgradeEffects(string upgradeID)
-    {
-        if (!upgrades.ContainsKey(upgradeID))
-            return;
-            
-        Upgrade upgrade = upgrades[upgradeID];
-        
-        foreach (var effect in upgrade.Definition.Effects)
-        {
-            switch (effect.Type)
-            {
-                case EffectType.UnlockResource:
-                    resourceManager.UnlockResource(effect.TargetID);
-                    break;
-                    
-                case EffectType.UnlockBuilding:
-                    // Handled by BuildingManager visibility conditions
-                    break;
-                    
-                case EffectType.UnlockUpgrade:
-                    // Unlock the target upgrade
-                    if (upgrades.ContainsKey(effect.TargetID))
-                    {
-                        upgrades[effect.TargetID].IsUnlocked = true;
-                    }
-                    break;
-                    
-                // Other effects are applied during resource calculations
-            }
-        }
     }
     
     /// <summary>
@@ -179,17 +215,17 @@ public class UpgradeManager : MonoBehaviour, IUpgradeManager
     /// <summary>
     /// Get all upgrades
     /// </summary>
-    public List<Upgrade> GetAllUpgrades()
+    public List<Game.Models.Upgrade> GetAllUpgrades()
     {
-        return new List<Upgrade>(upgrades.Values);
+        return new List<Game.Models.Upgrade>(upgrades.Values);
     }
     
     /// <summary>
     /// Get all purchased upgrades
     /// </summary>
-    public List<Upgrade> GetAllPurchasedUpgrades()
+    public List<Game.Models.Upgrade> GetAllPurchasedUpgrades()
     {
-        List<Upgrade> purchased = new List<Upgrade>();
+        List<Game.Models.Upgrade> purchased = new List<Game.Models.Upgrade>();
         
         foreach (var upgrade in upgrades.Values)
         {
@@ -203,15 +239,15 @@ public class UpgradeManager : MonoBehaviour, IUpgradeManager
     }
     
     /// <summary>
-    /// Get all visible upgrades
+    /// Get all visible upgrades (for interface compatibility)
     /// </summary>
-    public List<Upgrade> GetVisibleUpgrades()
+    public List<Game.Models.Upgrade> GetVisibleUpgrades()
     {
-        List<Upgrade> visible = new List<Upgrade>();
+        List<Game.Models.Upgrade> visible = new List<Game.Models.Upgrade>();
         
         foreach (var upgrade in upgrades.Values)
         {
-            if (upgrade.IsVisible && !upgrade.IsPurchased)
+            if (upgrade.IsVisible)
             {
                 visible.Add(upgrade);
             }
@@ -219,11 +255,29 @@ public class UpgradeManager : MonoBehaviour, IUpgradeManager
         
         return visible;
     }
+    
+    /// <summary>
+    /// Get upgrades that are available for purchase (visible and not purchased)
+    /// </summary>
+    public List<Game.Models.Upgrade> GetAvailableUpgrades()
+    {
+        List<Game.Models.Upgrade> available = new List<Game.Models.Upgrade>();
+        
+        foreach (var upgrade in upgrades.Values)
+        {
+            if (upgrade.IsVisible && !upgrade.IsPurchased)
+            {
+                available.Add(upgrade);
+            }
+        }
+        
+        return available;
+    }
 
     /// <summary>
     /// Get an upgrade definition by ID
     /// </summary>
-    public UpgradeDefinition GetUpgradeDefinition(string upgradeID)
+    public GameConfiguration.UpgradeDefinition GetUpgradeDefinition(string upgradeID)
     {
         if (upgrades.ContainsKey(upgradeID))
         {
@@ -252,7 +306,7 @@ public class UpgradeManager : MonoBehaviour, IUpgradeManager
         
         foreach (var kvp in upgrades)
         {
-            data.Upgrades.Add(new UpgradeSaveData.UpgradeData
+            data.Upgrades.Add(new UpgradeSaveData.UpgradeState
             {
                 ID = kvp.Key,
                 IsPurchased = kvp.Value.IsPurchased,
@@ -282,7 +336,7 @@ public class UpgradeManager : MonoBehaviour, IUpgradeManager
         {
             if (upgrades.ContainsKey(savedUpgrade.ID))
             {
-                Upgrade upgrade = upgrades[savedUpgrade.ID];
+                Game.Models.Upgrade upgrade = upgrades[savedUpgrade.ID];
                 upgrade.IsPurchased = savedUpgrade.IsPurchased;
                 upgrade.IsUnlocked = savedUpgrade.IsUnlocked;
             }
@@ -291,119 +345,20 @@ public class UpgradeManager : MonoBehaviour, IUpgradeManager
 }
 
 /// <summary>
-/// Types of effects that upgrades can have
-/// </summary>
-public enum EffectType
-{
-    UnlockBuilding,
-    UnlockUpgrade,
-    UnlockResource,
-    ProductionMultiplier,
-    StorageMultiplier,
-    ConsumptionReduction,
-    BuildingProductionMultiplier,
-    ResourceCapacityMultiplier
-}
-
-/// <summary>
-/// Definition for an upgrade - used for editor configuration
-/// </summary>
-[Serializable]
-public class UpgradeDefinition
-{
-    public string ID;
-    public string DisplayName;
-    public string Description;
-    public Sprite Icon;
-
-    public List<UpgradeVisibilityRequirement> VisibilityRequirements = new List<UpgradeVisibilityRequirement>();
-    
-    // Cost to purchase the upgrade
-    public List<ResourceAmount> Cost = new List<ResourceAmount>();
-    
-    // IDs of other upgrades that must be purchased first
-    public List<string> Prerequisites = new List<string>();
-    
-    // Effects this upgrade applies when purchased
-    public List<UpgradeEffect> Effects = new List<UpgradeEffect>();
-    
-    public bool VisibleByDefault = false;
-
-    public List<string> RequiredBuildings = new List<string>();
-    public List<string> RequiredUpgrades = new List<string>();
-}
-
-/// <summary>
-/// An effect applied by an upgrade
-/// </summary>
-[Serializable]
-public class UpgradeEffect
-{
-    public EffectType Type;
-    public string TargetID; // Resource, building, or upgrade ID
-    public float Value;     // Multiplier or other value
-}
-
-/// <summary>
-/// Runtime instance of an upgrade
-/// </summary>
-public class Upgrade
-{
-    public UpgradeDefinition Definition { get; private set; }
-    public bool IsPurchased { get; set; }
-    public bool IsUnlocked { get; set; }
-    
-    // Delegate for custom visibility conditions
-    public Func<bool> VisibilityCondition { get; set; } = () => true;
-    
-    // Modified to separate showing purchased upgrades from showing available upgrades
-    public bool IsVisible => IsUnlocked && (Definition.VisibleByDefault || VisibilityCondition());
-    
-    // Use this to check if the upgrade should be shown in the available upgrades list
-    public bool IsAvailableForPurchase => IsVisible && !IsPurchased;
-    
-    public Upgrade(UpgradeDefinition definition)
-    {
-        Definition = definition;
-        IsPurchased = false;
-        IsUnlocked = definition.VisibleByDefault;
-    }
-
-    public Dictionary<string, float> GetCost()
-    {
-        Dictionary<string, float> cost = new Dictionary<string, float>();
-        foreach (var resourceAmount in Definition.Cost)
-        {
-            cost[resourceAmount.ResourceID] = resourceAmount.Amount;
-        }
-        return cost;
-    }
-
-    public void Reset()
-    {
-        IsPurchased = false;
-        IsUnlocked = Definition.VisibleByDefault;
-    }
-}
-
-/// <summary>
 /// Serializable data for upgrades
 /// </summary>
 [Serializable]
-public class UpgradeData
+public class UpgradeSaveData
 {
-    public List<UpgradeState> upgradeStates;
-}
-
-/// <summary>
-/// Serializable state of a single upgrade
-/// </summary>
-[Serializable]
-public class UpgradeState
-{
-    public string id;
-    public bool isPurchased;
-    public bool isUnlocked;
+    public List<UpgradeState> Upgrades = new List<UpgradeState>();
+    
+    [Serializable]
+    public class UpgradeState
+    {
+        public string ID;
+        public bool IsPurchased;
+        public bool IsUnlocked;
+    }
 }
 
 [Serializable]
