@@ -3,6 +3,8 @@ using UnityEngine;
 using UnityEngine.UI;
 using TMPro;
 using UnityEngine.EventSystems;
+using Game.Interfaces;
+using GameConfiguration;
 
 /// <summary>
 /// Manages global tooltip system for the game
@@ -309,7 +311,7 @@ public class TooltipManager : MonoBehaviour
     /// </summary>
     /// <param name="building">Building definition to show effects for</param>
     /// <returns>Formatted effects string</returns>
-    public string GetBuildingEffectsString(BuildingDefinition building)
+    public string GetBuildingEffectsString(GameConfiguration.BuildingDefinition building)
     {
         string effects = string.Empty;
         
@@ -323,7 +325,7 @@ public class TooltipManager : MonoBehaviour
     /// </summary>
     /// <param name="upgrade">Upgrade definition to show effects for</param>
     /// <returns>Formatted effects string</returns>
-    public string GetUpgradeEffectsString(UpgradeDefinition upgrade)
+    public string GetUpgradeEffectsString(GameConfiguration.UpgradeDefinition upgrade)
     {
         string effects = string.Empty;
         

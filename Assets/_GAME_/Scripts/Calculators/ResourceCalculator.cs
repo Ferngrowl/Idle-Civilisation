@@ -1,8 +1,6 @@
-using System.Collections.Generic;
 using UnityEngine;
 using Game.Interfaces;
-using Game.Models;
-using GameConfiguration;
+
 
 /// <summary>
 /// Handles all resource calculations including production, consumption, and capacity
@@ -18,6 +16,14 @@ public class ResourceCalculator
         this.resourceManager = resourceManager;
         this.buildingManager = buildingManager;
         this.upgradeManager = upgradeManager;
+    }
+    
+    /// <summary>
+    /// Helper method to check if an effect's type matches the target type
+    /// </summary>
+    private bool IsEffectType(GameConfiguration.UpgradeEffect effect, GameConfiguration.EffectType targetType)
+    {
+        return (int)effect.Type == (int)targetType;
     }
     
     /// <summary>
@@ -81,8 +87,9 @@ public class ResourceCalculator
         {
             foreach (var effect in upgrade.Definition.Effects)
             {
-                if (effect.Type == EffectType.BuildingProductionMultiplier && 
-                    effect.TargetID == buildingID)
+                // Check if this is a building-specific production multiplier by checking the target ID
+                if (IsEffectType(effect, GameConfiguration.EffectType.ProductionMultiplier) && 
+                    effect.TargetID == "building." + buildingID)
                 {
                     multiplier *= effect.Value;
                 }
@@ -107,7 +114,7 @@ public class ResourceCalculator
         {
             foreach (var effect in upgrade.Definition.Effects)
             {
-                if (effect.Type == EffectType.ProductionMultiplier && 
+                if (IsEffectType(effect, GameConfiguration.EffectType.ProductionMultiplier) && 
                     effect.TargetID == resourceID)
                 {
                     multiplier *= effect.Value;
@@ -176,7 +183,7 @@ public class ResourceCalculator
         {
             foreach (var effect in upgrade.Definition.Effects)
             {
-                if (effect.Type == EffectType.ConsumptionReduction && 
+                if (IsEffectType(effect, GameConfiguration.EffectType.ConsumptionReduction) && 
                     effect.TargetID == resourceID)
                 {
                     multiplier *= effect.Value;
@@ -245,11 +252,13 @@ public class ResourceCalculator
         {
             foreach (var effect in upgrade.Definition.Effects)
             {
-                if ((effect.Type == EffectType.StorageMultiplier || 
-                     effect.Type == EffectType.ResourceCapacityMultiplier) && 
-                    effect.TargetID == resourceID)
+                if (IsEffectType(effect, GameConfiguration.EffectType.StorageMultiplier) || 
+                    IsEffectType(effect, GameConfiguration.EffectType.ResourceCapacityMultiplier))
                 {
-                    multiplier *= effect.Value;
+                    if (effect.TargetID == resourceID)
+                    {
+                        multiplier *= effect.Value;
+                    }
                 }
             }
         }

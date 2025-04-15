@@ -848,6 +848,7 @@ MonoBehaviour:
   buildingManager: {fileID: 0}
   upgradeManager: {fileID: 0}
   uiManager: {fileID: 0}
+  timeManager: {fileID: 0}
 --- !u!4 &981578701
 Transform:
   m_ObjectHideFlags: 0
@@ -908,20 +909,7 @@ MonoBehaviour:
   m_Name: 
   m_EditorClassIdentifier: 
   upgradeDefinitions:
-  - ID: axe1
-    DisplayName: Better Axe
-    Description: Multiplier to wood production
-    Icon: {fileID: 0}
-    VisibilityRequirements: []
-    Cost:
-    - ResourceID: wood
-      Amount: 50
-    Prerequisites: []
-    Effects:
-    - Type: 3
-      TargetID: wood
-      Value: 1.1
-    VisibleByDefault: 1
+  - {fileID: 0}
 --- !u!114 &981578704
 MonoBehaviour:
   m_ObjectHideFlags: 0
@@ -935,21 +923,7 @@ MonoBehaviour:
   m_Name: 
   m_EditorClassIdentifier: 
   buildingDefinitions:
-  - ID: lumbermill
-    DisplayName: Lumber Mill
-    Description: Produces wood
-    Icon: {fileID: 0}
-    BaseCost:
-    - ResourceID: wood
-      Amount: 10
-    CostScaling: 1.1
-    Production:
-    - ResourceID: wood
-      Amount: 1
-    Consumption: []
-    Capacity: []
-    VisibilityRequirements: []
-    VisibleByDefault: 1
+  - {fileID: 11400000, guid: 875107160072f9c499da6e136ad8958e, type: 2}
 --- !u!114 &981578705
 MonoBehaviour:
   m_ObjectHideFlags: 0
@@ -963,14 +937,9 @@ MonoBehaviour:
   m_Name: 
   m_EditorClassIdentifier: 
   resourceDefinitions:
-  - ID: wood
-    DisplayName: Wood
-    Description: Wood
-    Icon: {fileID: 0}
-    HasCapacity: 1
-    InitialCapacity: 100
-    InitialAmount: 0
-    VisibleByDefault: 1
+  - {fileID: 11400000, guid: 7458dda511daba04c9f859acf54e2015, type: 2}
+  - {fileID: 11400000, guid: 50589ed5b8bbcd54487b1c0cba05226d, type: 2}
+  - {fileID: 11400000, guid: 2afc8ad1d50a40a42964824200377d4f, type: 2}
 --- !u!1 &991404222
 GameObject:
   m_ObjectHideFlags: 0

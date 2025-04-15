@@ -13,7 +13,11 @@ namespace GameConfiguration
         ConsumptionReduction,
         StorageMultiplier,
         ResourceCapacityMultiplier,
-        SpecialUnlock
+        SpecialUnlock,
+        BuildingProductionMultiplier,  
+        UnlockBuilding,                
+        UnlockUpgrade,                 
+        UnlockResource                 
     }
     
     /// <summary>
@@ -38,7 +42,7 @@ namespace GameConfiguration
     /// <summary>
     /// Scriptable object for defining upgrades
     /// </summary>
-    [CreateAssetMenu(fileName = "NewUpgrade", menuName = "Game/Upgrade Definition")]
+    [CreateAssetMenu(fileName = "NewUpgrade", menuName = "Game/Upgrades/Resource Production")]
     public class UpgradeDefinition : ScriptableObject
     {
         [Header("Upgrade Identity")]
@@ -83,4 +87,4 @@ namespace GameConfiguration
         public string ResourceID;
         public float Amount;
     }
-} 
+}

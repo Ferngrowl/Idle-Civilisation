@@ -1,3 +1,45 @@
+# Next Steps for Idle Civilization
+
+## Completed Tasks
+
+1. ✅ Resolved ambiguity in UpgradeEffect and EffectType classes
+2. ✅ Updated ResourceManager to use GameConfiguration.BuildingDefinition
+3. ✅ Updated Upgrade.cs to use GameConfiguration.BuildingDefinition
+4. ✅ Updated UpgradeManager.cs to use GameConfiguration.BuildingDefinition
+5. ✅ Updated Building.cs to use GameConfiguration.BuildingDefinition
+6. ✅ Updated BuildingManager.cs to use GameConfiguration.BuildingDefinition
+7. ✅ Removed duplicate BuildingSaveData class
+8. ✅ Fixed BuildingManager serialization to use Serialization.BuildingSaveData
+9. ✅ Created comprehensive testing plan for verifying changes
+10. ✅ Updated IResourceManager interface to use Serialization.ResourceSaveData
+11. ✅ Updated IUpgradeManager interface to use Serialization.UpgradeSaveData
+12. ✅ Fixed namespace references in UI and utility classes
+13. ✅ Updated SaveSystem to use proper serialization types
+14. ✅ Added proper type casting for EffectType comparisons in ResourceCalculator
+15. ✅ Fixed UpgradeData/UpgradeState naming in UpgradeManager serialization
+16. ✅ Added type conversion method for UpgradeEffect in UIManager
+
+## Current Issues
+
+1. ⚠️ Need to verify all changes work correctly using the testing plan
+2. ⚠️ Need to update documentation to reflect architectural changes
+3. ⚠️ Need to merge ambiguity-resolution branch to main
+
+## Next Tasks
+
+1. Execute the testing plan to verify all changes
+2. Update documentation to reflect architectural changes
+3. Merge ambiguity-resolution branch to main
+4. Tag the release with a version number
+
+## Future Improvements
+
+1. Consider adding unit tests for critical systems
+2. Consider adding performance profiling
+3. Consider adding more detailed logging for debugging
+4. Standardize enum values across namespaces to avoid casting
+5. Consolidate property names to be consistent across similar classes
+
 # Next Steps
 
 ## Current Status

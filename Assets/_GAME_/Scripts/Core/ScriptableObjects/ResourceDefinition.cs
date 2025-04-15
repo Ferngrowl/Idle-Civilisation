@@ -6,7 +6,7 @@ namespace GameConfiguration
     /// <summary>
     /// Definition for a resource type - used for editor configuration
     /// </summary>
-    [CreateAssetMenu(fileName = "NewResource", menuName = "Game/Resource Definition")]
+    [CreateAssetMenu(fileName = "NewResource", menuName = "Game/Resources/Basic Resource")]
     public class ResourceDefinition : ScriptableObject
     {
         [Header("Resource Identity")]

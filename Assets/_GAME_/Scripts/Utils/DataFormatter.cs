@@ -1,6 +1,8 @@
 using System;
 using System.Collections.Generic;
 using UnityEngine;
+using GameConfiguration;
+using Game.Models;
 
 /// <summary>
 /// Utility class for formatting various data types used in the game

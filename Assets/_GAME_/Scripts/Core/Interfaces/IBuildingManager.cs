@@ -29,7 +29,7 @@ namespace Game.Interfaces
         void Reset();
         
         // Save/load
-        BuildingSaveData SerializeData();
-        void DeserializeData(BuildingSaveData data);
+        Serialization.BuildingSaveData SerializeData();
+        void DeserializeData(Serialization.BuildingSaveData data);
     }
 } 

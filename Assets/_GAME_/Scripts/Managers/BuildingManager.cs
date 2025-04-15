@@ -208,13 +208,13 @@ public class BuildingManager : MonoBehaviour, IBuildingManager
     /// <summary>
     /// Create serializable data for save game
     /// </summary>
-    public BuildingSaveData SerializeData()
+    public Serialization.BuildingSaveData SerializeData()
     {
-        BuildingSaveData data = new BuildingSaveData();
+        Serialization.BuildingSaveData data = new Serialization.BuildingSaveData();
         
         foreach (var kvp in buildings)
         {
-            data.Buildings.Add(new BuildingSaveData.BuildingData
+            data.Buildings.Add(new Serialization.BuildingSaveData.BuildingData
             {
                 ID = kvp.Key,
                 Count = kvp.Value.Count,
@@ -228,11 +228,11 @@ public class BuildingManager : MonoBehaviour, IBuildingManager
     /// <summary>
     /// Load from serialized data
     /// </summary>
-    public void DeserializeData(BuildingSaveData data)
+    public void DeserializeData(Serialization.BuildingSaveData data)
     {
         if (data == null || data.Buildings == null)
             return;
-            
+        
         // Reset all buildings first
         foreach (var building in buildings.Values)
         {
@@ -276,107 +276,4 @@ public class BuildingManager : MonoBehaviour, IBuildingManager
     }
 }
 
-[Serializable]
-public class BuildingVisibilityRequirement {
-    public string RequiredBuildingID;
-    public int RequiredCount = 1;
-}
-
-/// <summary>
-/// Definition for a building type - used for editor configuration
-/// </summary>
-[Serializable]
-public class BuildingDefinition
-{
-    public string ID;
-    public string DisplayName;
-    public string Description;
-    public Sprite Icon;
-    
-    // Cost increases with each building constructed
-    public List<ResourceAmount> BaseCost = new List<ResourceAmount>();
-    public float CostScaling = 1.15f; // Default KG value
-    
-    // Resources this building produces per second
-    public List<ResourceAmount> Production = new List<ResourceAmount>();
-    
-    // Resources this building consumes per second
-    public List<ResourceAmount> Consumption = new List<ResourceAmount>();
-    
-    // Resource storage capacity this building provides
-    public List<ResourceAmount> Capacity = new List<ResourceAmount>();
-
-    public List<BuildingVisibilityRequirement> VisibilityRequirements = new List<BuildingVisibilityRequirement>();
-    
-    public bool VisibleByDefault = false;
-
-    public List<string> RequiredBuildings = new List<string>();
-}
-
-/// <summary>
-/// Runtime instance of a building
-/// </summary>
-public class Building
-{
-    public BuildingDefinition Definition { get; private set; }
-    public int Count { get; set; }
-    public bool IsUnlocked { get; set; }
-    
-    // Delegate for custom visibility conditions
-    public Func<bool> VisibilityCondition { get; set; } = () => true;
-    
-    public bool IsVisible => IsUnlocked && (Definition.VisibleByDefault || VisibilityCondition());
-    
-    public Building(BuildingDefinition definition)
-    {
-        Definition = definition;
-        Count = 0;
-        IsUnlocked = definition.VisibleByDefault;
-    }
-
-    public Dictionary<string, float> GetCurrentCost()
-    {
-        Dictionary<string, float> currentCost = new Dictionary<string, float>();
-        
-        foreach (var cost in Definition.BaseCost)
-        {
-            float scaledCost = cost.Amount * Mathf.Pow(Definition.CostScaling, Count);
-            currentCost[cost.ResourceID] = Mathf.Ceil(scaledCost);
-        }
-        
-        return currentCost;
-    }
-
-    public void Reset()
-    {
-        Count = 0;
-        IsUnlocked = Definition.VisibleByDefault;
-    }
-}
-
-/// <summary>
-/// Represents an amount of a specific resource
-/// </summary>
-[Serializable]
-public class ResourceAmount
-{
-    public string ResourceID;
-    public float Amount;
-}
-
-/// <summary>
-/// Serializable data for buildings
-/// </summary>
-[Serializable]
-public class BuildingSaveData
-{
-    public List<BuildingData> Buildings = new List<BuildingData>();
-
-    [Serializable]
-    public class BuildingData
-    {
-        public string ID;
-        public int Count;
-        public bool IsUnlocked;
-    }
-}
+// BuildingVisibilityRequirement class can be removed as it's redundant with the proper qualified namespace types

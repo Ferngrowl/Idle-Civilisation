@@ -2,6 +2,7 @@ using TMPro;
 using UnityEngine;
 using UnityEngine.UI;
 using System.Collections.Generic;
+using GameConfiguration;
 
 // Assuming TooltipProvider is defined in the project's default namespace
 // If it's in a different namespace, use that one

@@ -34,7 +34,7 @@ namespace Game.Interfaces
         void Tick(long tickNumber);
         
         // Save/load
-        ResourceSaveData SerializeData();
-        void DeserializeData(ResourceSaveData data);
+        Serialization.ResourceSaveData SerializeData();
+        void DeserializeData(Serialization.ResourceSaveData data);
     }
 } 

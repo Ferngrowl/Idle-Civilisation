@@ -1,5 +1,7 @@
 using System;
 using UnityEngine;
+using Game.Interfaces;
+using Serialization;
 
 /// <summary>
 /// Container for all game save data
@@ -7,10 +9,10 @@ using UnityEngine;
 [Serializable]
 public class GameData
 {
-    public ResourceData resourceData;
-    public BuildingData buildingData;
-    public UpgradeData upgradeData;
-    public TimeData timeData;
+    public Serialization.ResourceSaveData resourceData;
+    public Serialization.BuildingSaveData buildingData;
+    public Serialization.UpgradeSaveData upgradeData;
+    public Serialization.TimeSaveData timeData;
     public string lastSaveTime;
     public int checksum;
 }

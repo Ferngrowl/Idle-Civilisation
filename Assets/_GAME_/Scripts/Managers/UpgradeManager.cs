@@ -300,13 +300,13 @@ public class UpgradeManager : MonoBehaviour, IUpgradeManager
     /// <summary>
     /// Create serializable data for save game
     /// </summary>
-    public UpgradeSaveData SerializeData()
+    public Serialization.UpgradeSaveData SerializeData()
     {
-        UpgradeSaveData data = new UpgradeSaveData();
+        Serialization.UpgradeSaveData data = new Serialization.UpgradeSaveData();
         
         foreach (var kvp in upgrades)
         {
-            data.Upgrades.Add(new UpgradeSaveData.UpgradeState
+            data.Upgrades.Add(new Serialization.UpgradeSaveData.UpgradeData
             {
                 ID = kvp.Key,
                 IsPurchased = kvp.Value.IsPurchased,
@@ -320,7 +320,7 @@ public class UpgradeManager : MonoBehaviour, IUpgradeManager
     /// <summary>
     /// Load from serialized data
     /// </summary>
-    public void DeserializeData(UpgradeSaveData data)
+    public void DeserializeData(Serialization.UpgradeSaveData data)
     {
         if (data == null || data.Upgrades == null)
             return;
@@ -350,10 +350,10 @@ public class UpgradeManager : MonoBehaviour, IUpgradeManager
 [Serializable]
 public class UpgradeSaveData
 {
-    public List<UpgradeState> Upgrades = new List<UpgradeState>();
+    public List<UpgradeData> Upgrades = new List<UpgradeData>();
     
     [Serializable]
-    public class UpgradeState
+    public class UpgradeData
     {
         public string ID;
         public bool IsPurchased;

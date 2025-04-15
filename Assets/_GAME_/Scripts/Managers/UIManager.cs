@@ -637,7 +637,7 @@ public class UIManager : MonoBehaviour, IUIManager
         // Format effects using DataFormatter
         if (tooltipEffects != null)
         {
-            tooltipEffects.text = DataFormatter.GetEffectsString(upgradeDef.Effects);
+            tooltipEffects.text = DataFormatter.GetEffectsString(ConvertUpgradeEffects(upgradeDef.Effects));
         }
     }
     
@@ -879,6 +879,26 @@ public class UIManager : MonoBehaviour, IUIManager
             });
         }
         return costList;
+    }
+    
+    /// <summary>
+    /// Convert GameConfiguration.UpgradeEffect to UpgradeEffect
+    /// </summary>
+    private List<UpgradeEffect> ConvertUpgradeEffects(List<GameConfiguration.UpgradeEffect> effects)
+    {
+        List<UpgradeEffect> convertedEffects = new List<UpgradeEffect>();
+        
+        foreach (var effect in effects)
+        {
+            convertedEffects.Add(new UpgradeEffect
+            {
+                Type = (EffectType)(int)effect.Type,
+                TargetID = effect.TargetID,
+                Value = effect.Value
+            });
+        }
+        
+        return convertedEffects;
     }
     
     #endregion

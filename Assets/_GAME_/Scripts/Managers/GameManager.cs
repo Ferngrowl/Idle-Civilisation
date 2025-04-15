@@ -34,7 +34,7 @@ public class GameManager : MonoBehaviour
     public IBuildingManager Buildings => buildingManager;
     public IUpgradeManager Upgrades => upgradeManager;
     public IUIManager UI => (IUIManager)uiManager;
-    public ITimeManager Time => timeManager;
+    public TimeManager Time => timeManager;
     
     private void Awake()
     {
@@ -53,14 +53,12 @@ public class GameManager : MonoBehaviour
         if (buildingManager == null) buildingManager = GetComponent<BuildingManager>();
         if (upgradeManager == null) upgradeManager = GetComponent<UpgradeManager>();
         if (uiManager == null) uiManager = GetComponent<UIManager>();
-        if (timeManager == null) timeManager = GetComponent<TimeManager>();
         
         // Register services with ServiceLocator
-        ServiceLocator.Register<IResourceManager>((IResourceManager)resourceManager);
-        ServiceLocator.Register<IBuildingManager>((IBuildingManager)buildingManager);
-        ServiceLocator.Register<IUpgradeManager>((IUpgradeManager)upgradeManager);
-        ServiceLocator.Register<IUIManager>((IUIManager)uiManager);
-        ServiceLocator.Register<ITimeManager>((ITimeManager)timeManager);
+        ServiceLocator.Register<IResourceManager>(resourceManager);
+        ServiceLocator.Register<IBuildingManager>(buildingManager);
+        ServiceLocator.Register<IUpgradeManager>(upgradeManager);
+        ServiceLocator.Register<IUIManager>(uiManager);
     }
     
     private void Start()
@@ -83,15 +81,19 @@ public class GameManager : MonoBehaviour
     
     /// <summary>
     /// Setup event handlers for TimeManager
-    /// </summary>
-    private void SetupTimeEvents()
+    /// </summary> 
+    private void SetupTimeEvents() // Add this method
     {
-        timeManager.OnTick += OnTick;
-        timeManager.OnNewDay += OnNewDay;
-        timeManager.OnSeasonChange += OnSeasonChange;
-        timeManager.OnWeatherChange += OnWeatherChange;
-        timeManager.OnNewYear += OnNewYear;
+        if (timeManager != null)
+        {
+            timeManager.OnTick += OnTick;
+            timeManager.OnNewDay += OnNewDay;
+            timeManager.OnSeasonChange += OnSeasonChange;
+            timeManager.OnWeatherChange += OnWeatherChange;
+            timeManager.OnNewYear += OnNewYear;
+        }
     }
+   
     
     /// <summary>
     /// Handler for tick events - main game loop
@@ -102,42 +104,6 @@ public class GameManager : MonoBehaviour
         resourceManager.Tick(timeManager.TotalTicks);
         buildingManager.Tick(timeManager.TotalTicks);
         upgradeManager.Tick(timeManager.TotalTicks);
-    }
-    
-    /// <summary>
-    /// Handler for day change events
-    /// </summary>
-    private void OnNewDay()
-    {
-        // Daily events like random encounters could happen here
-        Debug.Log($"New day: {timeManager.GetDateString()}");
-    }
-    
-    /// <summary>
-    /// Handler for season change events
-    /// </summary>
-    private void OnSeasonChange(int season)
-    {
-        // Update UI and trigger any season-specific events
-        Debug.Log($"Season changed to {season}");
-    }
-    
-    /// <summary>
-    /// Handler for weather change events
-    /// </summary>
-    private void OnWeatherChange(int weather)
-    {
-        // Update UI and trigger any weather-specific events
-        Debug.Log($"Weather changed to {weather}");
-    }
-    
-    /// <summary>
-    /// Handler for new year events
-    /// </summary>
-    private void OnNewYear()
-    {
-        // New year events
-        Debug.Log($"New year: {timeManager.Year}");
     }
     
     private void Update()
@@ -307,6 +273,30 @@ public class GameManager : MonoBehaviour
         uiManager.RefreshUpgradeView();
         
         Debug.Log("Game reset!");
+    }
+
+    private void OnNewDay() // Add this method
+    {
+        // Logic for when a new day starts
+        Debug.Log("A new day has started!");
+    }
+
+    private void OnSeasonChange(int newSeason) // Add this method
+    {
+        // Logic for when the season changes
+        Debug.Log($"Season changed to: {newSeason}");
+    }
+
+    private void OnWeatherChange(int newWeather) // Add this method
+    {
+        // Logic for when the weather changes
+        Debug.Log($"Weather changed to: {newWeather}");
+    }
+
+    private void OnNewYear() // Add this method
+    {
+        // Logic for when a new year starts
+        Debug.Log("A new year has started!");
     }
 }
 

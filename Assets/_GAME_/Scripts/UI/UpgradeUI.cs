@@ -2,6 +2,7 @@ using TMPro;
 using UnityEngine;
 using UnityEngine.UI;
 using System.Collections.Generic;
+using GameConfiguration;
 
 
 public class UpgradeUI : MonoBehaviour

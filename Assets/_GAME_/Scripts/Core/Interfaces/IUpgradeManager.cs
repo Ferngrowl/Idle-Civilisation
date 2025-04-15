@@ -28,7 +28,7 @@ namespace Game.Interfaces
         void Reset();
         
         // Save/load
-        UpgradeSaveData SerializeData();
-        void DeserializeData(UpgradeSaveData data);
+        Serialization.UpgradeSaveData SerializeData();
+        void DeserializeData(Serialization.UpgradeSaveData data);
     }
 } 

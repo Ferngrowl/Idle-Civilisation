@@ -138,7 +138,7 @@ public class ResourceManager : MonoBehaviour, IResourceManager
             foreach (var effect in upgrade.Definition.Effects)
             {
                 // Fully qualify the enum and properties with GameConfiguration namespace
-                if ((int)effect.Type == (int)GameConfiguration.EffectType.ConsumptionMultiplier && 
+                if ((int)effect.Type == (int)GameConfiguration.EffectType.ConsumptionReduction && 
                     effect.TargetID == resourceID)
                 {
                     multiplier *= (1f + effect.Value);
@@ -255,13 +255,13 @@ public class ResourceManager : MonoBehaviour, IResourceManager
     /// <summary>
     /// Create serializable data for save game
     /// </summary>
-    public ResourceSaveData SerializeData()
+    public Serialization.ResourceSaveData SerializeData()
     {
-        ResourceSaveData data = new ResourceSaveData();
+        Serialization.ResourceSaveData data = new Serialization.ResourceSaveData();
         
         foreach (var kvp in resources)
         {
-            data.Resources.Add(new ResourceSaveData.ResourceData
+            data.Resources.Add(new Serialization.ResourceSaveData.ResourceData
             {
                 ID = kvp.Key,
                 Amount = kvp.Value.Amount,
@@ -276,7 +276,7 @@ public class ResourceManager : MonoBehaviour, IResourceManager
     /// <summary>
     /// Load from serialized data
     /// </summary>
-    public void DeserializeData(ResourceSaveData data)
+    public void DeserializeData(Serialization.ResourceSaveData data)
     {
         if (data == null || data.Resources == null)
             return;

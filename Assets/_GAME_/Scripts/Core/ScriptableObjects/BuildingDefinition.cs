@@ -28,7 +28,7 @@ namespace GameConfiguration
     /// <summary>
     /// ScriptableObject containing building configuration data
     /// </summary>
-    [CreateAssetMenu(fileName = "NewBuilding", menuName = "Game/Building Definition")]
+    [CreateAssetMenu(fileName = "NewBuilding", menuName = "Game/Buildings/Production Building")]
     public class BuildingDefinition : ScriptableObject
     {
         [Header("Building Identity")]
@@ -76,4 +76,4 @@ namespace GameConfiguration
         [Tooltip("Storage capacity increases from this building")]
         public List<ResourceEffect> Capacity = new List<ResourceEffect>();
     }
-} 
+}
