@@ -63,7 +63,7 @@ public class UIManager : MonoBehaviour, IUIManager
     private IResourceManager resourceManager;
     private IBuildingManager buildingManager;
     private IUpgradeManager upgradeManager;
-    private ITimeManager timeManager;
+  
     
     private void Awake()
     {
@@ -77,7 +77,6 @@ public class UIManager : MonoBehaviour, IUIManager
         resourceManager = ServiceLocator.Get<IResourceManager>();
         buildingManager = ServiceLocator.Get<IBuildingManager>();
         upgradeManager = ServiceLocator.Get<IUpgradeManager>();
-        timeManager = ServiceLocator.Get<ITimeManager>();
     }
     
     /// <summary>

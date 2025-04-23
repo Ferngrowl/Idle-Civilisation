@@ -822,6 +822,7 @@ GameObject:
   - component: {fileID: 981578705}
   - component: {fileID: 981578704}
   - component: {fileID: 981578703}
+  - component: {fileID: 981578706}
   - component: {fileID: 981578702}
   m_Layer: 0
   m_Name: GameManager
@@ -909,7 +910,7 @@ MonoBehaviour:
   m_Name: 
   m_EditorClassIdentifier: 
   upgradeDefinitions:
-  - {fileID: 0}
+  - {fileID: 11400000, guid: e1037af0d12fafe479d1caead372fd0b, type: 2}
 --- !u!114 &981578704
 MonoBehaviour:
   m_ObjectHideFlags: 0
@@ -940,6 +941,19 @@ MonoBehaviour:
   - {fileID: 11400000, guid: 7458dda511daba04c9f859acf54e2015, type: 2}
   - {fileID: 11400000, guid: 50589ed5b8bbcd54487b1c0cba05226d, type: 2}
   - {fileID: 11400000, guid: 2afc8ad1d50a40a42964824200377d4f, type: 2}
+--- !u!114 &981578706
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 981578699}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 9afac6f251c27444b9c262ce9a846630, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: 
+  tickDuration: 0.2
 --- !u!1 &991404222
 GameObject:
   m_ObjectHideFlags: 0

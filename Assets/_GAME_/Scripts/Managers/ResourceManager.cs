@@ -2,9 +2,6 @@ using System;
 using System.Collections.Generic;
 using UnityEngine;
 using Game.Interfaces;
-using Game.Models;
-using Serialization;
-using GameConfiguration;
 
 /// <summary>
 /// Manages all resources in the game. Handles production, consumption, and limits.
@@ -19,7 +16,6 @@ public class ResourceManager : MonoBehaviour, IResourceManager
     // Dependencies
     private IBuildingManager buildingManager;
     private IUpgradeManager upgradeManager;
-    private ITimeManager timeManager;
     
     public float GetProductionRate(string resourceID) => CalculateProductionRate(resourceID);
     public float GetConsumptionRate(string resourceID) => CalculateConsumptionRate(resourceID);
@@ -33,7 +29,6 @@ public class ResourceManager : MonoBehaviour, IResourceManager
         // Get dependencies from ServiceLocator
         buildingManager = ServiceLocator.Get<IBuildingManager>();
         upgradeManager = ServiceLocator.Get<IUpgradeManager>();
-        timeManager = ServiceLocator.Get<ITimeManager>();
         
         // Initialize all resources from definitions
         foreach (var definition in resourceDefinitions)
@@ -56,13 +51,6 @@ public class ResourceManager : MonoBehaviour, IResourceManager
                 // Calculate production rate (from buildings, etc.)
                 float productionRate = CalculateProductionRate(resource.Definition.ID);
                 float consumptionRate = CalculateConsumptionRate(resource.Definition.ID);
-                
-                // Apply seasonal effects if appropriate
-                if (timeManager != null)
-                {
-                    float seasonalModifier = timeManager.GetSeasonalModifier(resource.Definition.ID);
-                    productionRate *= seasonalModifier;
-                }
                 
                 // Apply net change
                 float netChange = (productionRate - consumptionRate) * deltaTime;
@@ -249,54 +237,6 @@ public class ResourceManager : MonoBehaviour, IResourceManager
             
             // Notify UI system about resource visibility change
             ServiceLocator.Get<IUIManager>().RefreshResourceView();
-        }
-    }
-    
-    /// <summary>
-    /// Create serializable data for save game
-    /// </summary>
-    public Serialization.ResourceSaveData SerializeData()
-    {
-        Serialization.ResourceSaveData data = new Serialization.ResourceSaveData();
-        
-        foreach (var kvp in resources)
-        {
-            data.Resources.Add(new Serialization.ResourceSaveData.ResourceData
-            {
-                ID = kvp.Key,
-                Amount = kvp.Value.Amount,
-                Capacity = kvp.Value.Capacity,
-                IsUnlocked = kvp.Value.IsUnlocked
-            });
-        }
-        
-        return data;
-    }
-    
-    /// <summary>
-    /// Load from serialized data
-    /// </summary>
-    public void DeserializeData(Serialization.ResourceSaveData data)
-    {
-        if (data == null || data.Resources == null)
-            return;
-            
-        // Reset all resources first
-        foreach (var resource in resources.Values)
-        {
-            resource.Reset();
-        }
-        
-        // Apply saved values
-        foreach (var savedResource in data.Resources)
-        {
-            if (resources.ContainsKey(savedResource.ID))
-            {
-                Game.Models.Resource resource = resources[savedResource.ID];
-                resource.Amount = savedResource.Amount;
-                resource.Capacity = savedResource.Capacity;
-                resource.IsUnlocked = savedResource.IsUnlocked;
-            }
         }
     }
     

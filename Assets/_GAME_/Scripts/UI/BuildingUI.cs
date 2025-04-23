@@ -33,52 +33,8 @@ public class BuildingUI : MonoBehaviour
         
         // Set cost using helper method
         SetButtonCost(cost);
-        
-        // Set up tooltip
-        SetupTooltip();
     }
-    
-    /// <summary>
-    /// Sets up the tooltip functionality for this building UI element
-    /// </summary>
-    private void SetupTooltip()
-    {
-        if (string.IsNullOrEmpty(BuildingID))
-            return;
-        
-        // Find UI manager if not already set
-        if (uiManager == null)
-            uiManager = FindObjectOfType<UIManager>();
-        
-        if (uiManager == null)
-            return;
-        
-        // Add tooltip trigger to the game object
-        TooltipTrigger.AddTooltip(gameObject, uiManager, BuildingID, UIType.Building);
-        
-        // Make sure buttons remain clickable by ensuring they're not blocked by the tooltip
-        ConfigureButtonsForTooltip();
-    }
-    
-    /// <summary>
-    /// Ensures buttons within the building UI can still be clicked when tooltips are active
-    /// </summary>
-    private void ConfigureButtonsForTooltip()
-    {
-        // Find all buttons in this UI element
-        Button[] buttons = GetComponentsInChildren<Button>();
-        
-        // Make sure each button's raycast target is enabled
-        foreach (Button button in buttons)
-        {
-            if (button != null && button.image != null)
-            {
-                // Ensure button image is still a raycast target
-                button.image.raycastTarget = true;
-            }
-        }
-    }
-    
+ 
     public void SetButtonCost(List<ResourceAmount> cost)
     {
         if (CostText == null) return;

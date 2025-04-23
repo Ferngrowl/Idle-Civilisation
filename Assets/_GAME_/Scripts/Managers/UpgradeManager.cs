@@ -1,11 +1,8 @@
 using System;
 using System.Collections.Generic;
 using UnityEngine;
-using System.Linq;
 using Game.Interfaces;
-using Game.Models;
-using Serialization;
-using GameConfiguration;
+
 
 /// <summary>
 /// Manages upgrades. Handles purchasing, effects, and visibility.
@@ -297,51 +294,6 @@ public class UpgradeManager : MonoBehaviour, IUpgradeManager
         }
     }
     
-    /// <summary>
-    /// Create serializable data for save game
-    /// </summary>
-    public Serialization.UpgradeSaveData SerializeData()
-    {
-        Serialization.UpgradeSaveData data = new Serialization.UpgradeSaveData();
-        
-        foreach (var kvp in upgrades)
-        {
-            data.Upgrades.Add(new Serialization.UpgradeSaveData.UpgradeData
-            {
-                ID = kvp.Key,
-                IsPurchased = kvp.Value.IsPurchased,
-                IsUnlocked = kvp.Value.IsUnlocked
-            });
-        }
-        
-        return data;
-    }
-    
-    /// <summary>
-    /// Load from serialized data
-    /// </summary>
-    public void DeserializeData(Serialization.UpgradeSaveData data)
-    {
-        if (data == null || data.Upgrades == null)
-            return;
-        
-        // Reset all upgrades first
-        foreach (var upgrade in upgrades.Values)
-        {
-            upgrade.Reset();
-        }
-        
-        // Apply saved values
-        foreach (var savedUpgrade in data.Upgrades)
-        {
-            if (upgrades.ContainsKey(savedUpgrade.ID))
-            {
-                Game.Models.Upgrade upgrade = upgrades[savedUpgrade.ID];
-                upgrade.IsPurchased = savedUpgrade.IsPurchased;
-                upgrade.IsUnlocked = savedUpgrade.IsUnlocked;
-            }
-        }
-    }
 }
 
 /// <summary>

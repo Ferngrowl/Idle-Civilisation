@@ -30,49 +30,6 @@ public class UpgradeUI : MonoBehaviour
         // Set cost using helper method
         SetButtonCost(cost);
         
-        // Set up tooltip
-        SetupTooltip();
-    }
-    
-    /// <summary>
-    /// Sets up the tooltip functionality for this upgrade UI element
-    /// </summary>
-    private void SetupTooltip()
-    {
-        if (string.IsNullOrEmpty(UpgradeID))
-            return;
-        
-        // Find UI manager if not already set
-        if (uiManager == null)
-            uiManager = FindObjectOfType<UIManager>();
-        
-        if (uiManager == null)
-            return;
-        
-        // Add tooltip trigger to the game object
-        TooltipTrigger.AddTooltip(gameObject, uiManager, UpgradeID, UIType.Upgrade);
-        
-        // Make sure buttons within the upgrade UI can be clicked
-        ConfigureButtonsForTooltip();
-    }
-    
-    /// <summary>
-    /// Ensures buttons within the upgrade UI can still be clicked when tooltips are active
-    /// </summary>
-    private void ConfigureButtonsForTooltip()
-    {
-        // Find all buttons in this UI element
-        Button[] buttons = GetComponentsInChildren<Button>();
-        
-        // Make sure each button's raycast target is enabled
-        foreach (Button button in buttons)
-        {
-            if (button != null && button.image != null)
-            {
-                // Ensure button image is still a raycast target
-                button.image.raycastTarget = true;
-            }
-        }
     }
     
     public void SetButtonCost(List<ResourceAmount> cost)
